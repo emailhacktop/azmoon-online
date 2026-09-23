@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- بهینه برای موبایل -->
+<title>آزمون آنلاین</title>
+
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+<style>
+body{
+  font-family:tahoma;
+  background:#f4f6f8;
+  direction:rtl;
+  text-align:center;
+  user-select: none; /* غیرقابل انتخاب/کپی کلی صفحه */
+}
+.box{
+  background:#fff;
+  padding:20px;
+  margin:20px auto;
+  width:90%;
+  max-width:520px;
+  border-radius:12px;
+  box-shadow:0 5px 15px rgba(0,0,0,.1);
+  user-select: none; /* غیرقابل انتخاب/کپی در باکس‌ها */
+}
+button{
+  padding:12px;
+  font-size:15px;
+  margin:6px;
+  width:90%;
+  border:none;
+  border-radius:8px;
+  background:linear-gradient(135deg,#4e73df,#1cc88a);
+  color:#fff;
+  cursor:pointer
+}
+button:hover{opacity:.9}
+#timer{color:red;font-weight:bold}
+
+.qMeta{
+  display:flex;
+  justify-content:space-between;
+  font-size:13px;
+  margin-bottom:8px;
+  user-select: none; /* غیرقابل انتخاب/کپی متا */
+}
+.cat-تاریخ{color:#6f42c1}
+.cat-جغرافیا{color:#198754}
+.cat-ترکیبی{color:#fd7e14}
+.cat-شعر{color:#ff69b4}
+.cat-ادبیات{color:#20b2aa}
+.cat-موسیقی{color:#ff4500}
+.cat-هنر{color:#9370db}
+.cat-ریاضی{color:#00ff00}
+.cat-هوش{color:#0000ff}
+
+table{width:100%;border-collapse:collapse;margin-top:15px}
+th,td{border:1px solid #ccc;padding:6px}
+.correct{background:#d4edda}
+.wrong{background:#f8d7da}
+footer {font-size:12px; color:#888; margin-top:20px;}
+#categoryResult {font-size:14px; color:#555; text-align:right; margin-bottom:10px; user-select: none;} /* برای نمایش نوع آزمون در نتیجه */
+
+/* بهینه‌سازی برای موبایل */
+@media (max-width: 600px) {
+  .box {
+    width: 98%; /* پهن‌تر برای موبایل */
+    padding: 15px;
+    margin: 10px auto;
+  }
+  button {
+    font-size: 16px; /* خواناتر */
+    padding: 10px;
+  }
+  h2, h3 {
+    font-size: 20px;
+  }
+  input, select {
+    width: 95%; /* ورودی‌ها پهن‌تر */
+    font-size: 16px;
+  }
+  table {
+    font-size: 14px;
+  }
+  .qMeta {
+    font-size: 12px;
+  }
+  #opts button {
+    width: 100%; /* گزینه‌ها در موبایل پهن‌تر */
+    margin: 5px 0;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="box" id="startBox">
+  <h2>آزمون آنلاین</h2>
+  <p>انتخاب دسته:</p>
+  <select id="category">
+    <option value="history_geo">تاریخ و جغرافیا</option>
+    <option value="literature">شعر و ادبیات</option>
+    <option value="art_music">موسیقی و هنر</option>
+    <option value="math_iq">هوش و ریاضی</option>
+  </select><br><br>
+  <input id="name" placeholder="نام شرکت‌کننده"><br>
+  <input id="studentId" placeholder="شماره دانش‌آموزی"><br><br>
+  <button onclick="startExam()">📝 شروع آزمون</button>
+  <button onclick="openStudy()">📘 مرور سوالات</button>
+</div>
+
+<div class="box" id="examBox" style="display:none; user-select: none;"> <!-- غیرقابل کپی در آزمون -->
+  <p>⏱️ زمان باقی‌مانده: <span id="timer">03:00</span></p>
+  <p id="qCounter"></p>
+
+  <div class="qMeta">
+    <span id="qCat"></span>
+    <span id="qId"></span>
+  </div>
+
+  <h3 id="q"></h3>
+  <div id="opts"></div>
+</div>
+
+<div class="box" id="endBox" style="display:none; user-select: none;"> <!-- غیرقابل کپی در نتیجه -->
+  <p id="categoryResult"></p> <!-- جدید: نمایش نوع آزمون -->
+  <h2 id="result"></h2>
+  <div id="review"></div>
+  <button onclick="location.reload()">خروج</button>
+</div>
+
+<footer>طراح کد: AminSystem2000</footer>
+
+<script>
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxb7_ftCamS7Vfq7fm_wUFxPgF14klFs5wpg-90SHH1Fx1RgjVI87ikPR_SPuLS2GCp/exec";
+
+const startBox = document.getElementById("startBox");
+const examBox = document.getElementById("examBox");
+const endBox = document.getElementById("endBox");
+const timerSpan = document.getElementById("timer");
+const qCounter = document.getElementById("qCounter");
+const qCat = document.getElementById("qCat");
+const qId = document.getElementById("qId");
+const q = document.getElementById("q");
+const opts = document.getElementById("opts");
+const result = document.getElementById("result");
+const review = document.getElementById("review");
+const nameInput = document.getElementById("name");
+const studentIdInput = document.getElementById("studentId");
+const categorySelect = document.getElementById("category");
+const categoryResult = document.getElementById("categoryResult"); // جدید
+
+let qs = [], i = 0, score = 0, time = 180, timer;
+let answersLog = [], userName = "", category = "";
+
+const categoryMap = { // برای ترجمه به فارسی
+  "history_geo": "تاریخ و جغرافیا",
+  "literature": "شعر و ادبیات",
+  "art_music": "موسیقی و هنر",
+  "math_iq": "هوش و ریاضی"
+};
+
+function shuffle(a) { return a.sort(() => Math.random() - 0.5) }
+
+function selectQuestions() {
+  switch (category) {
+    case "history_geo":
+      return [
+        ...shuffle(HISTORY || []).slice(0, 4),
+        ...shuffle(GEOGRAPHY || []).slice(0, 4),
+        ...shuffle(MIXED || []).slice(0, 2)
+      ].sort(() => Math.random() - 0.5);
+    case "literature":
+      return [
+        ...shuffle(POETRY || []).slice(0, 4),
+        ...shuffle(LITERATURE || []).slice(0, 4),
+        ...shuffle(MIXED || []).slice(0, 2)
+      ].sort(() => Math.random() - 0.5);
+    case "art_music":
+      return [
+        ...shuffle(MUSIC || []).slice(0, 4),
+        ...shuffle(ART || []).slice(0, 4),
+        ...shuffle(MIXED || []).slice(0, 2)
+      ].sort(() => Math.random() - 0.5);
+    case "math_iq":
+      return [
+        ...shuffle(MATH || []).slice(0, 4),
+        ...shuffle(IQ || []).slice(0, 4),
+        ...shuffle(MIXED || []).slice(0, 2)
+      ].sort(() => Math.random() - 0.5);
+    default:
+      return [];
+  }
+}
+
+function startExam() {
+  category = categorySelect.value;
+  try {
+    userName = nameInput.value.trim();
+    const studentId = studentIdInput.value.trim();
+    if (!userName || !studentId || !category) { alert("نام، شماره و دسته را وارد کنید"); return }
+
+    const script = document.createElement('script');
+    script.src = `questions_${category}.js`;
+    script.onload = () => {
+      try {
+        qs = selectQuestions();
+        if (qs.length === 0) throw new Error("سوالات خالی!");
+        startBox.style.display = "none";
+        examBox.style.display = "block";
+        showQ();
+        startTimer();
+      } catch (err) {
+        alert("خطا در لود سوالات: " + err.message);
+      }
+    };
+    script.onerror = () => alert("خطا در بارگیری سوالات!");
+    document.head.appendChild(script);
+  } catch (err) {
+    console.error("خطا در شروع آزمون:", err);
+    alert("مشکلی پیش آمد!");
+  }
+}
+
+function startTimer() {
+  timer = setInterval(() => {
+    let m = Math.floor(time / 60), s = time % 60;
+    timerSpan.innerText = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+    time--;
+    if (time < 0) { clearInterval(timer); finish() }
+  }, 1000);
+}
+
+function showQ() {
+  if (i >= qs.length) { finish(); return }
+
+  qCounter.innerText = 'سؤال ' + (i + 1) + ' از ' + qs.length;
+  qCat.innerText = qs[i].cat;
+  qCat.className = "cat-" + qs[i].cat;
+  qId.innerText = "#" + qs[i].id;
+  q.innerText = qs[i].q;
+
+  opts.innerHTML = "";
+  qs[i].a.forEach(x => {
+    opts.innerHTML += '<button onclick="ans(\'' + x.replace(/'/g, "\\'") + '\')">' + x + '</button>';
+  });
+}
+
+function ans(x) {
+  answersLog.push({
+    q: qs[i].q, user: x, correct: qs[i].c, ok: x === qs[i].c
+  });
+  if (x === qs[i].c) score++;
+  i++; showQ();
+}
+
+function finish() {
+  try {
+    clearInterval(timer);
+    examBox.style.display = "none";
+    endBox.style.display = "block";
+
+    categoryResult.innerText = 'نوع آزمون: ' + (categoryMap[category] || category); // جدید: نمایش نوع آزمون فارسی
+    result.innerText = userName + '\nنمره: ' + score + ' از 10';
+
+    let t = "<table><tr><th>سؤال</th><th>پاسخ شما</th><th>پاسخ صحیح</th></tr>";
+    answersLog.forEach(a => {
+      t += '<tr class="' + (a.ok ? 'correct' : 'wrong') + '">' +
+        '<td>' + a.q + '</td><td>' + a.user + '</td><td>' + a.correct + '</td></tr>';
+    });
+    review.innerHTML = t + "</table>";
+
+    if (score === 10) confetti({ particleCount: 200, spread: 120 });
+
+    fetch(WEB_APP_URL, {
+      method: "POST",
+      body: JSON.stringify({
+        action: "examResult",
+        name: userName,
+        studentId: studentIdInput.value.trim(),
+        category: category || "نامشخص",
+        score: score
+      })
+    });
+  } catch (err) {
+    console.error("خطا در پایان آزمون:", err);
+    alert("مشکلی در ثبت نتیجه پیش آمد!");
+  }
+}
+
+function openStudy() {
+  category = categorySelect.value;
+  const studyName = prompt("نام شرکت‌کننده برای ثبت مطالعه");
+  if (!studyName) return alert("نام لازم است!");
+  const u = prompt("نام کاربری");
+  const p = prompt("رمز");
+
+  fetch(WEB_APP_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "loginStudy",
+      username: u,
+      password: p,
+      category: category || "نامشخص",
+      studyName: studyName
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) { alert("دسترسی غیرمجاز"); return }
+    const script = document.createElement('script');
+    script.src = `questions_${category}.js`;
+    script.onload = () => {
+      if (typeof ALL_QUESTIONS === 'undefined') { alert("سوالات تعریف نشده!"); return }
+      showStudyContent();
+    };
+    script.onerror = () => alert("خطا در بارگیری!");
+    document.head.appendChild(script);
+  });
+}
+
+function showStudyContent() {
+  startBox.style.display = "none";
+  let html = "<div class='box'><h3>📘 مرور سوالات (" + (categoryMap[category] || category) + ")</h3>";
+  ALL_QUESTIONS.forEach(q => {
+    html += '<p class="cat-' + q.cat + '">' +
+      '<b>' + q.id + ' – ' + q.q + '</b><br>' +
+      '✅ ' + q.c + '</p><hr>';
+  });
+  html += '<button onclick="location.reload()">بازگشت</button></div>';
+  document.body.insertAdjacentHTML("beforeend", html);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>آزمون آنلاین - نسخه امن ۲.۰</title>
+<meta name="description" content="آزمون آنلاین با بانک پویا و تصحیح امن">
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" integrity="sha384-5l7g2c3O5p7a2b8g5a1b2c3d4e5f6g7h8i9j0k" crossorigin="anonymous"></script>
+<style>
+  :root{
+    --primary:#4e73df;
+    --success:#1cc88a;
+    --bg:#f4f6f8;
+    --card:#ffffff;
+    --text:#2c3e50;
+    --muted:#6c757d;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    font-family: Tahoma, "Vazirmatn", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    direction: rtl;
+    text-align: center;
+    margin:0;
+    padding:0;
+    user-select: none;
+  }
+  .container{
+    max-width: 560px;
+    margin: 18px auto;
+    padding: 0 12px;
+  }
+  .box{
+    background: var(--card);
+    padding: 22px;
+    margin: 14px auto;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,.08);
+    text-align: right;
+  }
+  .box.center{ text-align: center; }
+  h2,h3{ margin:8px 0; color: var(--text); }
+  .subtitle{ color: var(--muted); font-size:13px; margin-bottom:10px }
+  select, input{
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    font-size: 15px;
+    background: #fff;
+    margin: 6px 0;
+    outline: none;
+  }
+  select:focus, input:focus{ border-color: var(--primary); box-shadow: 0 0 0 3px rgba(78,115,223,.15); }
+  button{
+    padding: 12px 16px;
+    font-size: 15px;
+    margin: 6px 0;
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg,var(--primary),var(--success));
+    color: #fff;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all .15s;
+  }
+  button:hover{ opacity:.92; transform: translateY(-1px); }
+  button:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+  button.secondary{
+    background:#fff;
+    color: var(--primary);
+    border:1.5px solid var(--primary);
+  }
+  button.ghost{
+    background: transparent;
+    color: var(--muted);
+    border: 1px dashed #cbd5e0;
+  }
+  #timer{ color:#e74a3b; font-weight:800; font-variant-numeric: tabular-nums; }
+  .progress{
+    height:7px; background:#e9ecef; border-radius:99px; overflow:hidden; margin:8px 0 12px;
+  }
+  .progress > div{ height:100%; background:linear-gradient(90deg,var(--primary),var(--success)); width:0%; transition: width .4s; }
+  .qMeta{
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:12px; color:var(--muted); margin-bottom:10px; gap:8px;
+  }
+  .badge{
+    padding:4px 10px; border-radius:99px; font-size:12px; font-weight:700; background:#eef2ff; color:var(--primary);
+  }
+  .cat-تاریخ{ color:#6f42c1 } .cat-جغرافیا{color:#198754} .cat-ترکیبی{color:#fd7e14}
+  .cat-شعر{color:#d63384} .cat-ادبیات{color:#20c997} .cat-موسیقی{color:#ff4500}
+  .cat-هنر{color:#7c3aed} .cat-ریاضی{color:#0d6efd} .cat-هوش{color:#0d9488}
+  .cat-عمومی{color:#6b7280}
+  #q{ font-size:17px; line-height:1.7; margin:12px 0; }
+  #opts{ display:grid; gap:8px; }
+  #opts button{
+    background:#fff; color: var(--text); border:1.5px solid #e5e7eb;
+    text-align: right; padding:13px 14px; font-weight:500;
+  }
+  #opts button:hover{ border-color: var(--primary); background:#f8f9ff; }
+  #opts button:active{ transform:scale(.99); }
+  table{ width:100%; border-collapse:collapse; margin-top:14px; font-size:13px; }
+  th,td{ border:1px solid #e5e7eb; padding:8px 6px; text-align:right; }
+  th{ background:#f8fafc; }
+  .correct{ background:#d1fae5; }
+  .wrong{ background:#fee2e2; }
+  .alert{
+    padding:10px 12px; border-radius:10px; font-size:13px; margin:10px 0; text-align:right;
+  }
+  .alert-warn{ background:#fffbeb; border:1px solid #fcd34d; color:#92400e; }
+  .alert-info{ background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; }
+  .alert-ok{ background:#ecfdf5; border:1px solid #6ee7b7; color:#065f46; }
+  footer{ font-size:11px; color:#9ca3af; margin:18px 0 8px; }
+  .admin-link{ display:inline-block; margin-top:10px; font-size:12px; color:var(--primary); text-decoration:none; }
+  .admin-link:hover{ text-decoration:underline; }
+  .hidden{ display:none !important; }
+  .flex{ display:flex; gap:8px; }
+  .flex > *{ flex:1; }
+  @media (max-width:600px){
+    .box{ padding:16px; margin:10px auto; }
+    h2{ font-size:19px; }
+    #q{ font-size:16px; }
+  }
+  /* جلوگیری از انتخاب فقط ظاهری - در JS هم جلوی کپی گرفته می‌شود */
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- باکس شروع -->
+  <div class="box center" id="startBox">
+    <h2>📝 آزمون آنلاین <span style="font-size:12px; background:#eef2ff; color:#4e73df; padding:2px 8px; border-radius:99px;">نسخه امن ۲.۰</span></h2>
+    <p class="subtitle">بانک ۴۰۰ سوال در ۴ دسته - هر آزمون ۱۰ سوال تصادفی - زمان ۳ دقیقه</p>
+
+    <div id="secureBadge" class="alert alert-info hidden" style="text-align:center"></div>
+
+    <label style="font-size:13px; display:block; text-align:right; margin-top:8px;">انتخاب دسته:</label>
+    <select id="category"></select>
+
+    <input id="name" placeholder="نام و نام خانوادگی" autocomplete="name" maxlength="80">
+    <input id="studentId" placeholder="شماره دانش‌آموزی / کد ملی" autocomplete="off" inputmode="numeric" maxlength="30">
+
+    <div class="flex" style="margin-top:8px;">
+      <button id="btnStart" onclick="startExam()">شروع آزمون</button>
+      <button class="secondary" onclick="openStudy()">📘 مرور سوالات</button>
+    </div>
+
+    <div class="alert alert-warn" style="font-size:12px;">
+      ⚠️ نکته امنیتی: پاسخ‌های صحیح دیگر در کد صفحه مخفی نیست. در حالت امن، تصحیح در سرور انجام می‌شود.
+    </div>
+
+    <a class="admin-link" href="admin.html">🔐 ورود مدیریت / پنل ادمین</a>
+    <div style="margin-top:10px; font-size:11px; color:#9ca3af;">
+      <span id="dbInfo"></span>
+    </div>
+  </div>
+
+  <!-- باکس آزمون -->
+  <div class="box hidden" id="examBox">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>⏱️ زمان: <span id="timer">03:00</span></div>
+      <div style="font-size:12px; color:#6b7280;" id="qCounter"></div>
+    </div>
+    <div class="progress"><div id="progressBar"></div></div>
+
+    <div class="qMeta">
+      <span id="qCat" class="badge"></span>
+      <span id="qId" style="font-variant-numeric: tabular-nums;"></span>
+    </div>
+
+    <h3 id="q"></h3>
+    <div id="opts"></div>
+
+    <button class="ghost" style="margin-top:12px;" onclick="abortExam()">انصراف و بازگشت</button>
+  </div>
+
+  <!-- باکس پایان -->
+  <div class="box hidden" id="endBox">
+    <p id="categoryResult" style="font-size:13px; color:#6b7280;"></p>
+    <h2 id="result"></h2>
+    <p id="elapsedInfo" style="font-size:12px; color:#6b7280;"></p>
+    <div id="review"></div>
+    <div class="flex" style="margin-top:14px;">
+      <button onclick="location.reload()">🔄 آزمون جدید</button>
+      <button class="secondary" onclick="shareResult()">اشتراک نتیجه</button>
+    </div>
+  </div>
+
+  <footer>طراحی اولیه: AminSystem2000 — نسخه امن ۲.۰ بازمهندسی شده • <span id="year"></span></footer>
+</div>
+
+<script>
+// ============ تنظیمات ============
+// اگر می‌خواهید حالت امن سرور فعال باشد، آدرس Web App را اینجا بگذارید
+// در غیر این صورت خالی بگذارید تا حالت آفلاین (کلاینت) فعال شود
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
+const USE_SECURE_MODE = WEB_APP_URL && WEB_APP_URL.startsWith("https://");
+
+const DB_URL = "assets/questions_db.json"; // بانک یکپارچه جدید
+const FALLBACK_JS = {
+  "history_geo": "questions_history_geo.js",
+  "literature": "questions_literature.js",
+  "art_music": "questions_art_music.js",
+  "math_iq": "questions_math_iq.js"
+};
+
+let DB = null; // کل بانک
+let categoryMap = {}; // id -> label
+
+const startBox = document.getElementById("startBox");
+const examBox = document.getElementById("examBox");
+const endBox = document.getElementById("endBox");
+const timerSpan = document.getElementById("timer");
+const qCounter = document.getElementById("qCounter");
+const qCat = document.getElementById("qCat");
+const qId = document.getElementById("qId");
+const qEl = document.getElementById("q");
+const opts = document.getElementById("opts");
+const resultEl = document.getElementById("result");
+const reviewEl = document.getElementById("review");
+const nameInput = document.getElementById("name");
+const studentIdInput = document.getElementById("studentId");
+const categorySelect = document.getElementById("category");
+const categoryResult = document.getElementById("categoryResult");
+const progressBar = document.getElementById("progressBar");
+const secureBadge = document.getElementById("secureBadge");
+const dbInfo = document.getElementById("dbInfo");
+
+let qs = []; // سوالات فعلی آزمون (در حالت امن بدون c)
+let currentIndex = 0;
+let score = 0;
+let answersLog = []; // برای حالت آفلاین
+let secureAnswers = []; // برای حالت امن: [{uid, answer}]
+let userName = "", category = "";
+let attemptId = null;
+let timer = null;
+let startTimeMs = 0;
+let totalDuration = 180;
+
+document.getElementById("year").textContent = new Date().getFullYear();
+
+// ============ ابزار ============
+function fisherYates(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+function sanitizeText(s){
+  // جلوگیری از XSS: فقط textContent استفاده می‌کنیم
+  return String(s||"");
+}
+function showSecureBadge(){
+  if(USE_SECURE_MODE){
+    secureBadge.textContent = "✅ حالت امن فعال است - تصحیح در سرور، تقلب ناممکن";
+    secureBadge.className = "alert alert-ok";
+    secureBadge.classList.remove("hidden");
+  } else {
+    secureBadge.textContent = "⚠️ حالت آفلاین - پاسخ‌ها در مرورگر تصحیح می‌شود (قابل دور زدن)";
+    secureBadge.className = "alert alert-warn";
+    secureBadge.classList.remove("hidden");
+  }
+}
+
+// ============ بارگذاری بانک ============
+async function loadDB(){
+  try{
+    const res = await fetch(DB_URL, {cache:"no-store"});
+    if(!res.ok) throw new Error("not found");
+    DB = await res.json();
+    // ساخت categoryMap
+    DB.categories.forEach(c=>{
+      categoryMap[c.id]=c.label;
+    });
+    populateCategorySelect();
+    dbInfo.textContent = `بانک یکپارچه: ${DB.questions.length} سوال در ${DB.categories.length} دسته`;
+    console.log("DB loaded", DB.meta);
+  } catch(e){
+    console.warn("DB json not found, fallback to legacy JS files", e);
+    // fallback: دسته‌های ثابت قدیمی
+    const fallbackCats = [
+      {id:"history_geo", label:"تاریخ و جغرافیا"},
+      {id:"literature", label:"شعر و ادبیات"},
+      {id:"art_music", label:"موسیقی و هنر"},
+      {id:"math_iq", label:"هوش و ریاضی"},
+    ];
+    DB = {categories: fallbackCats, questions: []};
+    fallbackCats.forEach(c=> categoryMap[c.id]=c.label);
+    populateCategorySelect();
+    dbInfo.textContent = "حالت سازگار قدیمی - ۴ دسته";
+  }
+}
+function populateCategorySelect(){
+  categorySelect.innerHTML="";
+  (DB.categories||[]).forEach(cat=>{
+    const opt=document.createElement("option");
+    opt.value=cat.id;
+    opt.textContent = `${cat.icon||"📁"} ${cat.label} (${(DB.questions.filter(q=>q.category===cat.id).length)||"?" } سوال)`;
+    categorySelect.appendChild(opt);
+  });
+  // اگر دسته‌ای از قبل انتخاب نشده، اولی را بگذار
+  if(DB.categories.length) categorySelect.value=DB.categories[0].id;
+}
+
+// ============ انتخاب سوالات حالت آفلاین ============
+function selectQuestionsOffline(catId){
+  const pool = DB.questions.filter(q=>q.category===catId);
+  if(pool.length===0){
+    // fallback به فایل‌های قدیمی اگر DB خالی است
+    return null;
+  }
+  // گروه‌بندی پویا
+  const groups={};
+  pool.forEach(q=>{
+    const g=q.group||"عمومی";
+    if(!groups[g]) groups[g]=[];
+    groups[g].push(q);
+  });
+  const groupNames=Object.keys(groups);
+  let selected=[];
+  if(groupNames.length>=3){
+    groupNames.sort();
+    const g0=fisherYates(groups[groupNames[0]]).slice(0,4);
+    const g1=fisherYates(groups[groupNames[1]]).slice(0,4);
+    let rest=[];
+    for(let i=2;i<groupNames.length;i++) rest=rest.concat(groups[groupNames[i]]);
+    const g2=fisherYates(rest).slice(0,2);
+    selected=g0.concat(g1).concat(g2);
+  } else if(groupNames.length===2){
+    selected=fisherYates(groups[groupNames[0]]).slice(0,5).concat(fisherYates(groups[groupNames[1]]).slice(0,5));
+  } else {
+    selected=fisherYates(pool).slice(0,10);
+  }
+  return fisherYates(selected).slice(0,10);
+}
+
+// ============ شروع آزمون ============
+async function startExam(){
+  category = categorySelect.value;
+  userName = nameInput.value.trim();
+  const studentId = studentIdInput.value.trim();
+
+  if(!userName || !studentId || !category){
+    alert("نام، شماره و دسته را وارد کنید");
+    return;
+  }
+  if(userName.length<2 || userName.length>80){
+    alert("نام معتبر وارد کنید (2 تا 80 کاراکتر)");
+    return;
+  }
+  if(studentId.length<2){
+    alert("شماره دانش‌آموزی معتبر نیست");
+    return;
+  }
+
+  const btn = document.getElementById("btnStart");
+  btn.disabled=true; btn.textContent="در حال آماده‌سازی...";
+
+  try{
+    if(USE_SECURE_MODE){
+      // حالت امن: از سرور سوال بگیر
+      const resp = await fetch(WEB_APP_URL, {
+        method:"POST",
+        headers: {"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify({action:"getExam", category: category})
+      });
+      const data = await resp.json();
+      if(!data.ok) throw new Error(data.error||"خطا از سرور");
+      qs = data.questions;
+      attemptId = data.attemptId;
+      totalDuration = data.duration || 180;
+      if(qs.length===0) throw new Error("سوالی دریافت نشد");
+      // مقداردهی اولیه
+      secureAnswers=[];
+      currentIndex=0; score=0; answersLog=[];
+      startBox.classList.add("hidden");
+      examBox.classList.remove("hidden");
+      startTimeMs = Date.now();
+      showQ();
+      startTimer();
+    } else {
+      // حالت آفلاین
+      let selected = selectQuestionsOffline(category);
+      if(selected===null){
+        // لود فایل قدیمی
+        await loadLegacyJS(category);
+        selected = selectQuestionsLegacy();
+      }
+      if(!selected || selected.length===0) throw new Error("سوالات خالی!");
+      qs = selected;
+      // برای آفلاین، گزینه‌ها را هم شافل کنیم
+      qs = qs.map(q=> ({...q, a: fisherYates(q.a)}));
+      currentIndex=0; score=0; answersLog=[]; secureAnswers=[];
+      totalDuration=180;
+      startBox.classList.add("hidden");
+      examBox.classList.remove("hidden");
+      startTimeMs=Date.now();
+      showQ();
+      startTimer();
+    }
+  } catch(err){
+    console.error(err);
+    alert("خطا در شروع آزمون: "+err.message);
+  } finally {
+    btn.disabled=false; btn.textContent="شروع آزمون";
+  }
+}
+
+function loadLegacyJS(cat){
+  return new Promise((resolve,reject)=>{
+    if(window.HISTORY || window.POETRY) { resolve(); return; }
+    const s=document.createElement("script");
+    s.src=FALLBACK_JS[cat] || `questions_${cat}.js`;
+    s.onload=()=>resolve();
+    s.onerror=()=>reject(new Error("بارگیری فایل سوالات ناموفق"));
+    document.head.appendChild(s);
+  });
+}
+function selectQuestionsLegacy(){
+  // همان منطق قدیمی ولی با fisherYates
+  const sh = arr=> fisherYates(arr||[]);
+  switch(category){
+    case "history_geo":
+      return fisherYates([...sh(window.HISTORY).slice(0,4), ...sh(window.GEOGRAPHY).slice(0,4), ...sh(window.MIXED).slice(0,2)]);
+    case "literature":
+      return fisherYates([...sh(window.POETRY).slice(0,4), ...sh(window.LITERATURE).slice(0,4), ...sh(window.MIXED).slice(0,2)]);
+    case "art_music":
+      return fisherYates([...sh(window.MUSIC).slice(0,4), ...sh(window.ART).slice(0,4), ...sh(window.MIXED).slice(0,2)]);
+    case "math_iq":
+      return fisherYates([...sh(window.MATH).slice(0,4), ...sh(window.IQ).slice(0,4), ...sh(window.MIXED).slice(0,2)]);
+    default: return [];
+  }
+}
+
+// ============ تایمر ضد دستکاری ============
+function startTimer(){
+  clearInterval(timer);
+  updateTimerDisplay(totalDuration);
+  timer = setInterval(()=>{
+    const elapsed = Math.floor((Date.now() - startTimeMs)/1000);
+    const remain = totalDuration - elapsed;
+    if(remain<=0){
+      clearInterval(timer);
+      updateTimerDisplay(0);
+      finish();
+    } else {
+      updateTimerDisplay(remain);
+      // پروگرس
+      const pct = Math.min(100, Math.max(0, (elapsed/totalDuration)*100));
+      progressBar.style.width = pct+"%";
+    }
+  }, 500);
+}
+function updateTimerDisplay(sec){
+  const m=Math.floor(sec/60), s=sec%60;
+  timerSpan.textContent = (m<10?"0"+m:m)+":"+(s<10?"0"+s:s);
+  if(sec<30) timerSpan.style.color="#dc2626";
+  else timerSpan.style.color="#e74a3b";
+}
+
+// ============ نمایش سوال ============
+function showQ(){
+  if(currentIndex >= qs.length){ finish(); return; }
+  const cur = qs[currentIndex];
+  qCounter.textContent = `سوال ${currentIndex+1} از ${qs.length}`;
+  qCat.textContent = cur.cat || cur.group || "عمومی";
+  qCat.className = "badge cat-" + (cur.cat || cur.group || "عمومی");
+  qId.textContent = "#"+(cur.id||currentIndex+1);
+  qEl.textContent = sanitizeText(cur.q);
+
+  opts.innerHTML="";
+  // جلوگیری از دابل کلیک
+  let answered=false;
+  cur.a.forEach(optText=>{
+    const btn=document.createElement("button");
+    btn.textContent = sanitizeText(optText);
+    btn.onclick=()=>{
+      if(answered) return;
+      answered=true;
+      // افکت کوتاه
+      btn.style.borderColor="#4e73df";
+      setTimeout(()=> ans(optText, cur), 120);
+    };
+    opts.appendChild(btn);
+  });
+  // پروگرس
+  progressBar.style.width = ((currentIndex/qs.length)*100)+"%";
+}
+
+function ans(selectedText, cur){
+  // cur می‌تواند uid داشته باشد (حالت امن)
+  const uid = cur.uid || cur.q;
+  if(USE_SECURE_MODE){
+    secureAnswers.push({uid: uid, answer: selectedText});
+  } else {
+    const correct = cur.c;
+    const ok = selectedText === correct;
+    answersLog.push({q: cur.q, user: selectedText, correct: correct, ok: ok, cat: cur.cat||cur.group});
+    if(ok) score++;
+  }
+  currentIndex++;
+  showQ();
+}
+
+function abortExam(){
+  if(confirm("آیا از خروج مطمئن هستید؟ پاسخ‌ها ذخیره نمی‌شود.")){
+    clearInterval(timer);
+    location.reload();
+  }
+}
+
+// ============ پایان و ارسال ============
+async function finish(){
+  clearInterval(timer);
+  examBox.classList.add("hidden");
+  endBox.classList.remove("hidden");
+  categoryResult.textContent = "نوع آزمون: " + (categoryMap[category] || category);
+
+  const elapsedSec = Math.floor((Date.now()-startTimeMs)/1000);
+
+  if(USE_SECURE_MODE){
+    resultEl.textContent = "در حال تصحیح در سرور...";
+    reviewEl.innerHTML = "<p style='color:#6b7280; font-size:13px;'>لطفاً شکیبا باشید</p>";
+    try{
+      const resp = await fetch(WEB_APP_URL, {
+        method:"POST",
+        headers: {"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify({
+          action:"submitExam",
+          attemptId: attemptId,
+          name: userName,
+          studentId: studentIdInput.value.trim(),
+          category: category,
+          answers: secureAnswers,
+          ip: "", userAgent: navigator.userAgent
+        })
+      });
+      const data = await resp.json();
+      if(!data.ok) throw new Error(data.error);
+      score = data.score;
+      resultEl.textContent = `${userName}\nنمره: ${data.score} از ${data.total}` + (data.overtime ? " (زمان اضافه)" : "");
+      document.getElementById("elapsedInfo").textContent = `زمان صرف شده: ${Math.floor(data.elapsed/60)}:${String(data.elapsed%60).padStart(2,'0')}`;
+
+      let html = `<table><tr><th>سوال</th><th>پاسخ شما</th><th>پاسخ صحیح</th></tr>`;
+      data.review.forEach(r=>{
+        html += `<tr class="${r.ok?'correct':'wrong'}"><td>${sanitizeText(r.q)}</td><td>${sanitizeText(r.user)}</td><td>${sanitizeText(r.correct)}</td></tr>`;
+      });
+      html+="</table>";
+      reviewEl.innerHTML = html;
+      if(data.score===data.total) confetti({particleCount:220, spread:120, origin:{y:0.6}});
+      // همچنین لاگ قدیمی برای سازگاری
+    } catch(e){
+      console.error(e);
+      resultEl.textContent = "خطا در ثبت نتیجه: "+e.message;
+      reviewEl.innerHTML = `<div class="alert alert-warn">پاسخ‌های شما: ${secureAnswers.length} سوال. خطا: ${sanitizeText(e.message)}</div>`;
+    }
+  } else {
+    // آفلاین
+    resultEl.textContent = `${userName}\nنمره: ${score} از ${qs.length}`;
+    document.getElementById("elapsedInfo").textContent = `زمان: ${Math.floor(elapsedSec/60)}:${String(elapsedSec%60).padStart(2,'0')}`;
+    let html = `<table><tr><th>سوال</th><th>پاسخ شما</th><th>پاسخ صحیح</th></tr>`;
+    answersLog.forEach(a=>{
+      html += `<tr class="${a.ok?'correct':'wrong'}"><td>${sanitizeText(a.q)}</td><td>${sanitizeText(a.user)}</td><td>${sanitizeText(a.correct)}</td></tr>`;
+    });
+    html+="</table>";
+    reviewEl.innerHTML = html;
+    if(score===qs.length) confetti({particleCount:200, spread:120});
+    // ارسال لاگ به سرور (حتی در حالت آفلاین، برای آمار)
+    if(WEB_APP_URL){
+      fetch(WEB_APP_URL, {
+        method:"POST",
+        headers: {"Content-Type":"text/plain;charset=utf-8"},
+        body: JSON.stringify({
+          action:"examResult",
+          name: userName,
+          studentId: studentIdInput.value.trim(),
+          category: category,
+          score: score,
+          attemptId: attemptId||"offline_"+Date.now(),
+          answers: answersLog
+        })
+      }).catch(()=>{});
+    }
+  }
+}
+
+function shareResult(){
+  const text = resultEl.textContent + "\n" + location.href;
+  if(navigator.share){
+    navigator.share({title:"نتیجه آزمون", text:text}).catch(()=>{});
+  } else if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(()=> alert("نتیجه کپی شد"));
+  } else {
+    prompt("کپی کنید:", text);
+  }
+}
+
+// ============ مرور سوالات (نیاز به احراز هویت) ============
+async function openStudy(){
+  category = categorySelect.value;
+  const studyName = prompt("نام شرکت‌کننده برای ثبت مطالعه:");
+  if(!studyName) return alert("نام لازم است!");
+  const u = prompt("نام کاربری:");
+  if(!u) return;
+  const p = prompt("رمز:");
+  if(!p) return;
+
+  try{
+    const resp = await fetch(WEB_APP_URL, {
+      method:"POST",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({
+        action:"loginStudy",
+        username: u, password: p,
+        category: category, studyName: studyName,
+        userAgent: navigator.userAgent
+      })
+    });
+    const d = await resp.json();
+    if(!d.ok){
+      alert(d.error || "دسترسی غیرمجاز");
+      return;
+    }
+    // موفق: نمایش همه سوالات آن دسته (از DB یکپارچه)
+    if(DB.questions.length){
+      showStudyContentDB();
+    } else {
+      // fallback قدیمی
+      const s=document.createElement("script");
+      s.src=FALLBACK_JS[category] || `questions_${category}.js`;
+      s.onload=()=>{
+        if(typeof ALL_QUESTIONS==="undefined"){ alert("سوالات تعریف نشده!"); return; }
+        showStudyContentLegacy();
+      };
+      s.onerror=()=> alert("خطا در بارگیری!");
+      document.head.appendChild(s);
+    }
+  } catch(e){
+    alert("خطا در ارتباط با سرور: "+e.message);
+  }
+}
+function showStudyContentDB(){
+  startBox.classList.add("hidden");
+  const filtered = DB.questions.filter(q=>q.category===category);
+  let html = `<div class="box"><h3>📘 مرور سوالات (${categoryMap[category]||category}) - ${filtered.length} سوال</h3><p style="font-size:12px; color:#6b7280;">نمایش پاسخ صحیح - فقط برای مطالعه</p>`;
+  filtered.forEach(q=>{
+    html += `<div style="text-align:right; padding:10px; border:1px solid #e5e7eb; border-radius:10px; margin:8px 0;">
+      <div style="font-size:12px; color:#6b7280;">#${q.id} - <span class="badge cat-${sanitizeText(q.group)}">${sanitizeText(q.group)}</span></div>
+      <div style="font-weight:700; margin:6px 0;">${sanitizeText(q.q)}</div>
+      <div style="font-size:13px;">گزینه‌ها: ${q.a.map(a=>`<span style="background:#f3f4f6; padding:2px 6px; border-radius:6px; margin:2px; display:inline-block;">${sanitizeText(a)}</span>`).join("")}</div>
+      <div style="color:#065f46; font-weight:700; margin-top:6px;">✅ پاسخ: ${sanitizeText(q.c)}</div>
+    </div>`;
+  });
+  html += `<button onclick="location.reload()">بازگشت</button></div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  window.scrollTo({top: document.body.scrollHeight, behavior:"smooth"});
+}
+function showStudyContentLegacy(){
+  startBox.classList.add("hidden");
+  let html = `<div class="box"><h3>📘 مرور سوالات (${categoryMap[category]||category})</h3>`;
+  ALL_QUESTIONS.forEach(q=>{
+    html += `<p style="text-align:right;" class="cat-${sanitizeText(q.cat)}"><b>${q.id} - ${sanitizeText(q.q)}</b><br>✅ ${sanitizeText(q.c)}</p><hr>`;
+  });
+  html += `<button onclick="location.reload()">بازگشت</button></div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+}
+
+// ============ ضد کپی ظاهری (قابل دور زدن ولی مزاحم) ============
+document.addEventListener("contextmenu", e=> {
+  if(examBox && !examBox.classList.contains("hidden")) e.preventDefault();
+});
+document.addEventListener("copy", e=>{
+  if(examBox && !examBox.classList.contains("hidden")) e.preventDefault();
+});
+document.addEventListener("keydown", e=>{
+  if((e.ctrlKey && (e.key==='c' || e.key==='u' || e.key==='s')) && !examBox.classList.contains("hidden")){
+    e.preventDefault();
+  }
+  if(e.key==="PrintScreen") e.preventDefault();
+});
+
+// ============ راه‌اندازی ============
+loadDB().then(showSecureBadge);
+showSecureBadge();
+
+// ذخیره نام برای دفعه بعد
+try{
+  const savedName = localStorage.getItem("azmoon_name");
+  const savedId = localStorage.getItem("azmoon_id");
+  if(savedName) nameInput.value=savedName;
+  if(savedId) studentIdInput.value=savedId;
+  nameInput.addEventListener("change", ()=> localStorage.setItem("azmoon_name", nameInput.value));
+  studentIdInput.addEventListener("change", ()=> localStorage.setItem("azmoon_id", studentIdInput.value));
+}catch(e){}
+</script>
+</body>
+</html>

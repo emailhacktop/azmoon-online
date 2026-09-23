@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل مدیریت آزمون - Admin</title>
+<style>
+  :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
+  *{box-sizing:border-box}
+  body{ font-family: Tahoma, sans-serif; background:var(--bg); margin:0; color:#1f2937; direction:rtl; }
+  header{ background:linear-gradient(135deg,var(--primary),var(--success)); color:#fff; padding:16px; text-align:center; }
+  header h1{ margin:0; font-size:20px; }
+  header p{ margin:4px 0 0; opacity:.9; font-size:12px; }
+  .container{ max-width:1100px; margin:16px auto; padding:0 12px; }
+  .card{ background:var(--card); border-radius:var(--radius); padding:18px; box-shadow:0 6px 20px rgba(0,0,0,.07); margin-bottom:14px; }
+  input, select, textarea{ width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; font-size:14px; margin:6px 0; }
+  textarea{ min-height:80px; font-family: inherit; }
+  button{ padding:10px 16px; border:none; border-radius:10px; background:linear-gradient(135deg,var(--primary),var(--success)); color:#fff; cursor:pointer; font-weight:600; }
+  button.secondary{ background:#fff; color:var(--primary); border:1.5px solid var(--primary); }
+  button.danger{ background:var(--danger); }
+  button.ghost{ background:#f3f4f6; color:#374151; }
+  button:disabled{ opacity:.5; cursor:not-allowed; }
+  .hidden{ display:none !important; }
+  .tabs{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .tab{ padding:9px 14px; border-radius:99px; background:#e5e7eb; cursor:pointer; font-size:13px; font-weight:600; }
+  .tab.active{ background:var(--primary); color:#fff; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media(max-width:700px){ .grid2{ grid-template-columns:1fr; } }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  th,td{ border:1px solid #e5e7eb; padding:8px; text-align:right; vertical-align:top; }
+  th{ background:#f9fafb; position:sticky; top:0; }
+  .table-wrap{ max-height:520px; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; }
+  .badge{ padding:3px 8px; border-radius:99px; font-size:11px; background:#eef2ff; color:var(--primary); }
+  .alert{ padding:10px; border-radius:10px; font-size:13px; margin:8px 0; }
+  .alert-ok{ background:#ecfdf5; border:1px solid #6ee7b7; color:#065f46; }
+  .alert-warn{ background:#fffbeb; border:1px solid #fcd34d; color:#92400e; }
+  .alert-err{ background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
+  .flex{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .flex > *{ flex:1; }
+  .small{ font-size:12px; color:var(--muted); }
+  .qrow:hover{ background:#f9fafb; }
+  .actions{ display:flex; gap:6px; }
+  .actions button{ padding:6px 10px; font-size:12px; }
+  footer{ text-align:center; font-size:11px; color:#9ca3af; margin:14px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
+  <p>نسخه ۲.۰ - مدیریت پویا سوالات، دسته‌ها و رمز</p>
+</header>
+
+<div class="container">
+
+  <!-- باکس ورود -->
+  <div class="card" id="loginCard">
+    <h3>ورود مدیر</h3>
+    <p class="small">نام کاربری پیش‌فرض: <b>admin</b> - رمز: <b>Admin123!</b> (پس از ورود حتماً تغییر دهید)</p>
+    <input id="loginUser" placeholder="نام کاربری" value="admin">
+    <input id="loginPass" type="password" placeholder="رمز عبور">
+    <button id="btnLogin" onclick="doLogin()">ورود</button>
+    <div id="loginMsg"></div>
+    <div class="alert alert-warn" style="margin-top:12px;">
+      <b>نکته امنیتی:</b> توکن شما ۲ ساعت اعتبار دارد و پس از ۵ تلاش ناموفق، ۱۵ دقیقه قفل می‌شوید. رمزها با SHA-256 + Salt هش می‌شوند.
+    </div>
+    <p class="small" style="margin-top:10px;"><a href="index.html">← بازگشت به آزمون</a></p>
+  </div>
+
+  <!-- داشبورد -->
+  <div id="dashboard" class="hidden">
+
+    <div class="card">
+      <div class="flex" style="justify-content:space-between;">
+        <div>
+          <b id="welcome"></b> <span class="badge" id="roleBadge"></span>
+          <div class="small" id="tokenInfo"></div>
+        </div>
+        <div class="actions">
+          <button class="ghost" onclick="logout()">خروج</button>
+          <button class="secondary" onclick="loadFromServer()">🔄 بارگیری از سرور</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="questions" onclick="switchTab('questions')">📝 سوالات (<span id="qCount">0</span>)</div>
+      <div class="tab" data-tab="categories" onclick="switchTab('categories')">📁 دسته‌بندی‌ها</div>
+      <div class="tab" data-tab="users" onclick="switchTab('users')">👥 کاربران</div>
+      <div class="tab" data-tab="logs" onclick="switchTab('logs')">📊 لاگ‌ها</div>
+      <div class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ تنظیمات & رمز</div>
+    </div>
+
+    <!-- تب سوالات -->
+    <div id="tab-questions" class="card">
+      <div class="flex">
+        <input id="searchQ" placeholder="جستجو در متن سوال..." oninput="renderQuestions()">
+        <select id="filterCat" onchange="renderQuestions()"><option value="">همه دسته‌ها</option></select>
+        <select id="filterGroup" onchange="renderQuestions()"><option value="">همه گروه‌ها</option></select>
+      </div>
+      <div class="flex" style="margin:8px 0;">
+        <button onclick="openAddModal()">➕ افزودن سوال</button>
+        <button class="secondary" onclick="exportJSON()">⬇️ خروجی JSON</button>
+        <label style="flex:1; text-align:center; padding:10px; border:1.5px dashed #93c5fd; border-radius:10px; cursor:pointer; background:#eff6ff;">
+          ⬆️ وارد کردن JSON <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
+        </label>
+        <button class="ghost" onclick="saveToServer()" id="btnSaveServer">💾 ذخیره در سرور</button>
+      </div>
+      <div id="saveMsg"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>دسته</th><th>گروه</th><th>متن سوال</th><th>گزینه‌ها</th><th>صحیح</th><th>عملیات</th></tr></thead>
+          <tbody id="qTbody"></tbody>
+        </table>
+      </div>
+      <div class="small" style="margin-top:8px;">نکته: دسته‌ها پویا هستند. می‌توانید دسته جدید بسازید و سوالات جدید به آن اضافه کنید. هر آزمون ۱۰ سوال تصادفی از گروه‌های مختلف انتخاب می‌کند.</div>
+    </div>
+
+    <!-- تب دسته‌ها -->
+    <div id="tab-categories" class="card hidden">
+      <h3>مدیریت دسته‌بندی‌ها</h3>
+      <div class="grid2" id="catGrid"></div>
+      <hr>
+      <h4>افزودن دسته جدید</h4>
+      <div class="grid2">
+        <input id="newCatId" placeholder="شناسه انگلیسی (مثلاً science) - بدون فاصله">
+        <input id="newCatLabel" placeholder="عنوان فارسی (مثلاً علوم تجربی)">
+        <input id="newCatIcon" placeholder="آیکون اموجی (مثلاً 🔬)">
+        <input id="newCatColor" placeholder="رنگ HEX (مثلاً #0ea5e9)">
+      </div>
+      <input id="newCatGroups" placeholder="گروه‌ها با کاما جدا کن (مثلاً فیزیک,شیمی,زیست,ترکیبی)">
+      <button onclick="addCategory()">افزودن دسته</button>
+      <div id="catMsg"></div>
+    </div>
+
+    <!-- تب کاربران -->
+    <div id="tab-users" class="card hidden">
+      <h3>مدیریت کاربران</h3>
+      <p class="small">کاربران در شیت Users ذخیره می‌شوند. رمزها هش می‌شوند.</p>
+      <div class="grid2">
+        <input id="newUser" placeholder="نام کاربری">
+        <input id="newPass" placeholder="رمز (حداقل 4)">
+        <select id="newRole"><option value="user">user - دانش‌آموز</option><option value="admin">admin - مدیر</option></select>
+        <select id="newActive"><option value="yes">فعال</option><option value="no">غیرفعال</option></select>
+      </div>
+      <button onclick="createUser()">➕ ساخت کاربر</button>
+      <div id="userMsg"></div>
+      <hr>
+      <button class="secondary" onclick="loadLogs('study')">نمایش لاگ مطالعه</button>
+      <button class="secondary" onclick="loadLogs('exam')">نمایش لاگ آزمون</button>
+    </div>
+
+    <!-- تب لاگ -->
+    <div id="tab-logs" class="card hidden">
+      <div class="flex">
+        <button onclick="loadLogs('exam')">📝 لاگ آزمون</button>
+        <button onclick="loadLogs('study')">📘 لاگ مطالعه</button>
+        <button class="ghost" onclick="exportLogsCSV()">⬇️ خروجی CSV</button>
+      </div>
+      <div id="logInfo" class="small"></div>
+      <div class="table-wrap"><table><thead id="logHead"></thead><tbody id="logBody"></tbody></table></div>
+    </div>
+
+    <!-- تب تنظیمات -->
+    <div id="tab-settings" class="card hidden">
+      <h3>تغییر رمز مدیر</h3>
+      <input id="oldPass" type="password" placeholder="رمز فعلی">
+      <input id="newPass1" type="password" placeholder="رمز جدید (حداقل 6)">
+      <input id="newPass2" type="password" placeholder="تکرار رمز جدید">
+      <button onclick="changePass()">تغییر رمز</button>
+      <div id="passMsg"></div>
+      <hr>
+      <h4>پشتیبان‌گیری</h4>
+      <button class="secondary" onclick="backupAll()">⬇️ دانلود پشتیبان کامل (JSON)</button>
+      <p class="small">شامل دسته‌ها + سوالات + نسخه</p>
+      <div class="alert alert-warn">
+        <b>استقرار:</b> پس از تغییرات، فایل <code>assets/questions_db.json</code> را روی هاست آپلود کنید یا با «ذخیره در سرور» در شیت ذخیره کنید تا حالت امن سرور هم به‌روز شود.
+      </div>
+    </div>
+
+  </div>
+
+  <footer>پنل مدیریت امن ۲.۰ - توکن محور + هش رمز - طراحی AminSystem2000</footer>
+</div>
+
+<!-- مودال ویرایش -->
+<div id="modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:12px; z-index:99;">
+  <div class="card" style="max-width:640px; width:100%; max-height:90vh; overflow:auto;">
+    <h3 id="modalTitle">ویرایش سوال</h3>
+    <select id="mCat"></select>
+    <input id="mGroup" placeholder="گروه (مثلاً تاریخ)">
+    <textarea id="mQ" placeholder="متن سوال"></textarea>
+    <div class="grid2">
+      <input id="mA1" placeholder="گزینه 1">
+      <input id="mA2" placeholder="گزینه 2">
+      <input id="mA3" placeholder="گزینه 3">
+      <input id="mA4" placeholder="گزینه 4">
+    </div>
+    <input id="mC" placeholder="پاسخ صحیح (باید دقیقاً یکی از گزینه‌ها باشد)">
+    <div class="flex">
+      <button onclick="saveModal()">ذخیره</button>
+      <button class="secondary" onclick="closeModal()">انصراف</button>
+    </div>
+    <div id="modalMsg"></div>
+  </div>
+</div>
+
+<script>
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
+const DB_URL = "assets/questions_db.json";
+
+let DB = null;
+let token = localStorage.getItem("admin_token") || "";
+let currentUser = localStorage.getItem("admin_user") || "";
+let editingIndex = -1;
+let lastLogs = {header:[], rows:[]};
+
+function showMsg(elId, text, ok=true){
+  const el=document.getElementById(elId);
+  el.innerHTML = `<div class="alert ${ok?'alert-ok':'alert-err'}">${text}</div>`;
+  setTimeout(()=> el.innerHTML="", 4000);
+}
+
+// ============ ورود ============
+async function doLogin(){
+  const u=document.getElementById("loginUser").value.trim();
+  const p=document.getElementById("loginPass").value;
+  if(!u||!p) return showMsg("loginMsg","نام و رمز را وارد کنید",false);
+  document.getElementById("btnLogin").disabled=true;
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminLogin", username:u, password:p})});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error||"خطا");
+    token=d.token;
+    currentUser=d.username;
+    localStorage.setItem("admin_token", token);
+    localStorage.setItem("admin_user", currentUser);
+    showDashboard();
+    showMsg("loginMsg","ورود موفق ✅",true);
+  } catch(e){
+    showMsg("loginMsg", "خطا: "+e.message, false);
+  } finally{ document.getElementById("btnLogin").disabled=false; }
+}
+function showDashboard(){
+  if(!token) return;
+  document.getElementById("loginCard").classList.add("hidden");
+  document.getElementById("dashboard").classList.remove("hidden");
+  document.getElementById("welcome").textContent = "سلام، "+currentUser+" ";
+  document.getElementById("roleBadge").textContent="admin";
+  document.getElementById("tokenInfo").textContent="توکن فعال - انقضا 2 ساعت";
+  verifyToken();
+  loadDB();
+}
+function verifyToken(){
+  if(!token) return;
+  fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})})
+  .then(r=>r.json()).then(d=>{
+    if(!d.ok){
+      logout();
+      alert("توکن منقضی شد، دوباره وارد شوید");
+    }
+  });
+}
+function logout(){
+  localStorage.removeItem("admin_token");
+  localStorage.removeItem("admin_user");
+  location.reload();
+}
+function switchTab(name){
+  document.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.dataset.tab===name));
+  ["questions","categories","users","logs","settings"].forEach(n=>{
+    document.getElementById("tab-"+n).classList.toggle("hidden", n!==name);
+  });
+}
+
+// ============ بانک ============
+async function loadDB(){
+  // اول سعی کن از سرور بگیر
+  try{
+    if(token){
+      const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetQuestions", token:token})});
+      const d=await r.json();
+      if(d.ok && d.db && d.db.questions && d.db.questions.length){
+        DB=d.db;
+        console.log("Loaded from server", DB.questions.length);
+        renderAll();
+        return;
+      }
+    }
+  } catch(e){ console.warn("server load failed",e); }
+  // fallback به فایل محلی
+  try{
+    const r=await fetch(DB_URL,{cache:"no-store"});
+    DB=await r.json();
+    renderAll();
+  } catch(e){
+    DB={meta:{version:"2.0"}, categories:[
+      {id:"history_geo", label:"تاریخ و جغرافیا", icon:"🏛️", color:"#6f42c1", groups:["تاریخ","جغرافیا","ترکیبی"]},
+      {id:"literature", label:"شعر و ادبیات", icon:"📚", color:"#d63384", groups:["شعر","ادبیات","ترکیبی"]},
+      {id:"art_music", label:"موسیقی و هنر", icon:"🎨", color:"#fd7e14", groups:["هنر","موسیقی","ترکیبی"]},
+      {id:"math_iq", label:"هوش و ریاضی", icon:"🧮", color:"#0d6efd", groups:["ریاضی","هوش","ترکیبی"]},
+    ], questions:[]};
+    renderAll();
+  }
+}
+async function loadFromServer(){
+  token && await loadDB();
+  showMsg("saveMsg","بارگیری شد",true);
+}
+function renderAll(){
+  renderQuestions();
+  renderCategories();
+  populateFilters();
+  document.getElementById("qCount").textContent = DB.questions.length;
+}
+function populateFilters(){
+  const sel=document.getElementById("filterCat");
+  const mCat=document.getElementById("mCat");
+  sel.innerHTML='<option value="">همه دسته‌ها</option>';
+  mCat.innerHTML='';
+  DB.categories.forEach(c=>{
+    const o=document.createElement("option"); o.value=c.id; o.textContent=c.label; sel.appendChild(o);
+    const o2=document.createElement("option"); o2.value=c.id; o2.textContent=c.label; mCat.appendChild(o2);
+  });
+  // گروه‌ها را هم پویا کن
+  const gSel=document.getElementById("filterGroup");
+  const groups=[...new Set(DB.questions.map(q=>q.group))];
+  gSel.innerHTML='<option value="">همه گروه‌ها</option>';
+  groups.forEach(g=>{
+    const o=document.createElement("option"); o.value=g; o.textContent=g; gSel.appendChild(o);
+  });
+}
+function renderQuestions(){
+  const tbody=document.getElementById("qTbody");
+  const q=document.getElementById("searchQ").value.trim();
+  const fc=document.getElementById("filterCat").value;
+  const fg=document.getElementById("filterGroup").value;
+  let list=DB.questions;
+  if(fc) list=list.filter(x=>x.category===fc);
+  if(fg) list=list.filter(x=>x.group===fg);
+  if(q) list=list.filter(x=> x.q.includes(q) || x.a.some(a=>a.includes(q)));
+  // صفحه‌بندی ساده: فقط 100 تا اول
+  const show=list.slice(0,200);
+  tbody.innerHTML="";
+  show.forEach((item, idx)=>{
+    const realIdx=DB.questions.indexOf(item);
+    const tr=document.createElement("tr"); tr.className="qrow";
+    tr.innerHTML=`
+      <td>${realIdx+1}</td>
+      <td><span class="badge">${(DB.categories.find(c=>c.id===item.category)||{}).label||item.category}</span></td>
+      <td>${item.group}</td>
+      <td style="max-width:280px; white-space:pre-wrap;">${escapeHtml(item.q)}</td>
+      <td style="font-size:11px;">${item.a.map(a=>`<div>${escapeHtml(a)}</div>`).join("")}</td>
+      <td style="color:#065f46; font-weight:700;">${escapeHtml(item.c)}</td>
+      <td><div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button></div></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  if(list.length>200){
+    const tr=document.createElement("tr"); tr.innerHTML=`<td colspan="7" style="text-align:center;" class="small">نمایش 200 از ${list.length} - از فیلتر استفاده کنید</td>`; tbody.appendChild(tr);
+  }
+}
+function renderCategories(){
+  const grid=document.getElementById("catGrid");
+  grid.innerHTML="";
+  DB.categories.forEach((cat, idx)=>{
+    const div=document.createElement("div");
+    div.className="card"; div.style.borderRight=`6px solid ${cat.color||'#4e73df'}`;
+    div.innerHTML=`
+      <div style="font-weight:800;">${escapeHtml(cat.icon||"📁")} ${escapeHtml(cat.label)} <span class="small">(${cat.id})</span></div>
+      <div class="small">گروه‌ها: ${cat.groups.join("، ")}</div>
+      <div class="small">تعداد سوال: ${DB.questions.filter(q=>q.category===cat.id).length}</div>
+      <div class="actions" style="margin-top:8px;">
+        <button class="ghost" onclick="editCat(${idx})">ویرایش</button>
+        <button class="danger" onclick="delCat(${idx})">حذف</button>
+      </div>
+    `;
+    grid.appendChild(div);
+  });
+}
+
+// ============ CRUD سوالات ============
+function openAddModal(){
+  editingIndex=-1;
+  document.getElementById("modalTitle").textContent="افزودن سوال جدید";
+  document.getElementById("mQ").value="";
+  ["mA1","mA2","mA3","mA4","mGroup","mC"].forEach(id=> document.getElementById(id).value="");
+  document.getElementById("mCat").value = DB.categories[0]?.id || "";
+  document.getElementById("modal").classList.remove("hidden");
+}
+function editQ(idx){
+  editingIndex=idx;
+  const q=DB.questions[idx];
+  document.getElementById("modalTitle").textContent="ویرایش سوال #"+(idx+1);
+  document.getElementById("mCat").value=q.category;
+  document.getElementById("mGroup").value=q.group;
+  document.getElementById("mQ").value=q.q;
+  document.getElementById("mA1").value=q.a[0]||"";
+  document.getElementById("mA2").value=q.a[1]||"";
+  document.getElementById("mA3").value=q.a[2]||"";
+  document.getElementById("mA4").value=q.a[3]||"";
+  document.getElementById("mC").value=q.c;
+  document.getElementById("modal").classList.remove("hidden");
+}
+function closeModal(){ document.getElementById("modal").classList.add("hidden"); document.getElementById("modalMsg").innerHTML=""; }
+function saveModal(){
+  const cat=document.getElementById("mCat").value;
+  const group=document.getElementById("mGroup").value.trim();
+  const q=document.getElementById("mQ").value.trim();
+  const a=[document.getElementById("mA1").value.trim(), document.getElementById("mA2").value.trim(), document.getElementById("mA3").value.trim(), document.getElementById("mA4").value.trim()].filter(Boolean);
+  const c=document.getElementById("mC").value.trim();
+  if(!cat||!group||!q) return showMsg("modalMsg","دسته، گروه و متن سوال الزامی",false);
+  if(a.length<2) return showMsg("modalMsg","حداقل 2 گزینه",false);
+  if(!a.includes(c)) return showMsg("modalMsg","پاسخ صحیح باید یکی از گزینه‌ها باشد",false);
+  const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: editingIndex>=0? DB.questions[editingIndex].id : (DB.questions.length+1), category:cat, group:group, q:q, a:a, c:c};
+  if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
+  closeModal();
+  renderAll();
+  showMsg("saveMsg","ذخیره محلی شد - برای اعمال نهایی «ذخیره در سرور» را بزنید",true);
+}
+function delQ(idx){
+  if(!confirm("حذف سوال #"+(idx+1)+"؟")) return;
+  DB.questions.splice(idx,1);
+  renderAll();
+}
+
+// ============ دسته‌ها ============
+function addCategory(){
+  const id=document.getElementById("newCatId").value.trim().toLowerCase().replace(/\s+/g,"_");
+  const label=document.getElementById("newCatLabel").value.trim();
+  const icon=document.getElementById("newCatIcon").value.trim()||"📁";
+  const color=document.getElementById("newCatColor").value.trim()||"#4e73df";
+  const groups=document.getElementById("newCatGroups").value.split(",").map(s=>s.trim()).filter(Boolean);
+  if(!id||!label) return showMsg("catMsg","شناسه و عنوان الزامی",false);
+  if(DB.categories.some(c=>c.id===id)) return showMsg("catMsg","شناسه تکراری",false);
+  if(groups.length===0) return showMsg("catMsg","حداقل یک گروه وارد کنید",false);
+  DB.categories.push({id, label, icon, color, groups});
+  ["newCatId","newCatLabel","newCatIcon","newCatColor","newCatGroups"].forEach(i=> document.getElementById(i).value="");
+  renderAll();
+  showMsg("catMsg","دسته اضافه شد - ذخیره در سرور را بزنید",true);
+}
+function editCat(idx){
+  const cat=DB.categories[idx];
+  const label=prompt("عنوان جدید:", cat.label);
+  if(label===null) return;
+  const groups=prompt("گروه‌ها با کاما:", cat.groups.join(","));
+  if(groups===null) return;
+  cat.label=label.trim()||cat.label;
+  const g=groups.split(",").map(s=>s.trim()).filter(Boolean);
+  if(g.length) cat.groups=g;
+  renderAll();
+}
+function delCat(idx){
+  const cat=DB.categories[idx];
+  const cnt=DB.questions.filter(q=>q.category===cat.id).length;
+  if(cnt>0) if(!confirm(`این دسته ${cnt} سوال دارد. حذف شود؟ سوالات آن دسته هم حذف خواهند شد!`)) return;
+  DB.categories.splice(idx,1);
+  DB.questions = DB.questions.filter(q=>q.category!==cat.id);
+  renderAll();
+}
+
+// ============ ذخیره/بارگیری ============
+async function saveToServer(){
+  if(!token) return alert("توکن ندارید");
+  const btn=document.getElementById("btnSaveServer");
+  btn.disabled=true; btn.textContent="در حال ذخیره...";
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminSaveQuestions", token:token, db:DB})});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error);
+    showMsg("saveMsg", `✅ ذخیره شد (${d.count} سوال) روی سرور`, true);
+    // همچنین پیشنهاد دانلود فایل
+  } catch(e){
+    showMsg("saveMsg","خطا: "+e.message + " - می‌توانید خروجی JSON را دانلود و دستی روی هاست آپلود کنید", false);
+  } finally{ btn.disabled=false; btn.textContent="💾 ذخیره در سرور"; }
+}
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(DB, null, 2)], {type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="questions_db.json"; a.click();
+  URL.revokeObjectURL(url);
+}
+function importJSON(e){
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{
+      const j=JSON.parse(reader.result);
+      if(!j.questions || !j.categories) throw new Error("فرمت نامعتبر");
+      if(!confirm(`وارد کردن ${j.questions.length} سوال و ${j.categories.length} دسته؟ (جایگزین می‌شود)`)) return;
+      DB=j;
+      renderAll();
+      showMsg("saveMsg","وارد شد - ذخیره در سرور را بزنید",true);
+    } catch(err){ alert("خطا: "+err.message); }
+  };
+  reader.readAsText(f, "utf-8");
+  e.target.value="";
+}
+function backupAll(){
+  exportJSON();
+}
+
+// ============ کاربران ============
+async function createUser(){
+  const u=document.getElementById("newUser").value.trim();
+  const p=document.getElementById("newPass").value;
+  const role=document.getElementById("newRole").value;
+  const active=document.getElementById("newActive").value;
+  if(!u||!p) return showMsg("userMsg","نام و رمز الزامی",false);
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminCreateUser", token:token, username:u, password:p, role:role, active:active})});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error);
+    showMsg("userMsg","کاربر ساخته شد ✅",true);
+    document.getElementById("newUser").value=""; document.getElementById("newPass").value="";
+  } catch(e){ showMsg("userMsg","خطا: "+e.message,false); }
+}
+
+// ============ لاگ ============
+async function loadLogs(type){
+  switchTab("logs");
+  document.getElementById("logInfo").textContent="در حال بارگیری...";
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetLogs", token:token, logType:type})});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error);
+    lastLogs=d;
+    document.getElementById("logInfo").textContent=`نوع: ${type} - کل: ${d.total} - نمایش ${d.rows.length} ردیف آخر`;
+    const thead=document.getElementById("logHead");
+    const tbody=document.getElementById("logBody");
+    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    tbody.innerHTML="";
+    d.rows.slice().reverse().forEach(row=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c))}</td>`).join("");
+      tbody.appendChild(tr);
+    });
+  } catch(e){
+    document.getElementById("logInfo").textContent="خطا: "+e.message;
+  }
+}
+function exportLogsCSV(){
+  if(!lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
+  const csv=[lastLogs.header.join(",")].concat(lastLogs.rows.map(r=> r.map(c=> `"${String(c).replace(/"/g,'""')}"`).join(","))).join("\n");
+  const blob=new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="logs.csv"; a.click();
+}
+
+// ============ رمز ============
+async function changePass(){
+  const o=document.getElementById("oldPass").value;
+  const n1=document.getElementById("newPass1").value;
+  const n2=document.getElementById("newPass2").value;
+  if(!o||!n1||!n2) return showMsg("passMsg","همه فیلدها الزامی",false);
+  if(n1!==n2) return showMsg("passMsg","تکرار رمز مطابقت ندارد",false);
+  if(n1.length<6) return showMsg("passMsg","رمز حداقل 6 کاراکتر",false);
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminChangePassword", token:token, oldPassword:o, newPass:n1})});
+    const d=await r.json();
+    if(!d.ok) throw new Error(d.error);
+    showMsg("passMsg","رمز تغییر کرد ✅ - دوباره وارد شوید",true);
+    setTimeout(logout,1500);
+  } catch(e){ showMsg("passMsg","خطا: "+e.message,false); }
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+// auto login if token exists
+if(token){
+  showDashboard();
+}
+
+</script>
+</body>
+</html>
