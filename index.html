@@ -257,6 +257,13 @@ function sanitizeText(s){
   // جلوگیری از XSS: فقط textContent استفاده می‌کنیم
   return String(s||"");
 }
+async function getClientIP(){
+  try{
+    const r = await fetch('https://api.ipify.org?format=json', {cache:'no-store'});
+    const j = await r.json();
+    return j.ip||"";
+  }catch(e){ return ""; }
+}
 function showSecureBadge(){
   if(USE_SECURE_MODE){
     secureBadge.textContent = "✅ حالت امن فعال است - تصحیح در سرور، تقلب ناممکن";
@@ -539,7 +546,7 @@ async function finish(){
           studentId: studentIdInput.value.trim(),
           category: category,
           answers: secureAnswers,
-          ip: "", userAgent: navigator.userAgent
+          ip: await getClientIP(), userAgent: navigator.userAgent
         })
       });
       const data = await resp.json();
@@ -584,7 +591,8 @@ async function finish(){
           category: category,
           score: score,
           attemptId: attemptId||"offline_"+Date.now(),
-          answers: answersLog
+          answers: answersLog,
+          ip: await getClientIP(), userAgent: navigator.userAgent
         })
       }).catch(()=>{});
     }
@@ -620,7 +628,7 @@ async function openStudy(){
         action:"loginStudy",
         username: u, password: p,
         category: category, studyName: studyName,
-        userAgent: navigator.userAgent
+        ip: await getClientIP(), userAgent: navigator.userAgent
       })
     });
     const d = await resp.json();
