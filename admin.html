@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - Admin</title>
+<title>پنل مدیریت آزمون - v2.1</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -31,6 +31,8 @@
   th{ background:#f9fafb; position:sticky; top:0; }
   .table-wrap{ max-height:520px; overflow:auto; border:1px solid #e5e7eb; border-radius:10px; }
   .badge{ padding:3px 8px; border-radius:99px; font-size:11px; background:#eef2ff; color:var(--primary); }
+  .badge-admin{ background:#fef3c7; color:#92400e; }
+  .badge-user{ background:#d1fae5; color:#065f46; }
   .alert{ padding:10px; border-radius:10px; font-size:13px; margin:8px 0; }
   .alert-ok{ background:#ecfdf5; border:1px solid #6ee7b7; color:#065f46; }
   .alert-warn{ background:#fffbeb; border:1px solid #fcd34d; color:#92400e; }
@@ -39,15 +41,15 @@
   .flex > *{ flex:1; }
   .small{ font-size:12px; color:var(--muted); }
   .qrow:hover{ background:#f9fafb; }
-  .actions{ display:flex; gap:6px; }
-  .actions button{ padding:6px 10px; font-size:12px; }
+  .actions{ display:flex; gap:6px; flex-wrap:wrap; }
+  .actions button{ padding:6px 10px; font-size:12px; flex:none; }
   footer{ text-align:center; font-size:11px; color:#9ca3af; margin:14px 0; }
 </style>
 </head>
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۲.۰ - مدیریت پویا سوالات، دسته‌ها و رمز</p>
+  <p>نسخه ۲.۱ — مدیریت کاربران، فارسی‌سازی لاگ، ذخیره تکه‌تکه</p>
 </header>
 
 <div class="container">
@@ -61,7 +63,7 @@
     <button id="btnLogin" onclick="doLogin()">ورود</button>
     <div id="loginMsg"></div>
     <div class="alert alert-warn" style="margin-top:12px;">
-      <b>نکته امنیتی:</b> توکن شما ۲ ساعت اعتبار دارد و پس از ۵ تلاش ناموفق، ۱۵ دقیقه قفل می‌شوید. رمزها با SHA-256 + Salt هش می‌شوند.
+      <b>نکته امنیتی:</b> توکن ۲ ساعت اعتبار دارد. رمزها با SHA-256 + Salt هش می‌شوند. لینک WEB_APP_URL عمومی است و امنیت با توکن تامین می‌شود.
     </div>
     <p class="small" style="margin-top:10px;"><a href="index.html">← بازگشت به آزمون</a></p>
   </div>
@@ -99,20 +101,22 @@
       </div>
       <div class="flex" style="margin:8px 0;">
         <button onclick="openAddModal()">➕ افزودن سوال</button>
-        <button class="secondary" onclick="exportJSON()">⬇️ خروجی JSON</button>
+        <button class="secondary" onclick="exportJSON()">⬇️ خروجی JSON (بک‌آپ کامل)</button>
         <label style="flex:1; text-align:center; padding:10px; border:1.5px dashed #93c5fd; border-radius:10px; cursor:pointer; background:#eff6ff;">
-          ⬆️ وارد کردن JSON <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
+          ⬆️ وارد کردن JSON (بازگردانی) <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
         </label>
         <button class="ghost" onclick="saveToServer()" id="btnSaveServer">💾 ذخیره در سرور</button>
       </div>
       <div id="saveMsg"></div>
+      <div class="alert alert-warn small">
+        <b>نکته:</b> هر تغییری (حذف/افزودن/ویرایش) اول فقط در مرورگر ذخیره می‌شود. حتما بعدش <b>ذخیره در سرور</b> را بزنید تا در گوگل ثبت شود و دانش‌آموزان ببینند. <b>خروجی JSON</b> همان بک‌آپ کامل ۴ دسته است و با <b>وارد کردن JSON</b> می‌توانید کل بانک را برگردانید.
+      </div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>#</th><th>دسته</th><th>گروه</th><th>متن سوال</th><th>گزینه‌ها</th><th>صحیح</th><th>عملیات</th></tr></thead>
           <tbody id="qTbody"></tbody>
         </table>
       </div>
-      <div class="small" style="margin-top:8px;">نکته: دسته‌ها پویا هستند. می‌توانید دسته جدید بسازید و سوالات جدید به آن اضافه کنید. هر آزمون ۱۰ سوال تصادفی از گروه‌های مختلف انتخاب می‌کند.</div>
     </div>
 
     <!-- تب دسته‌ها -->
@@ -132,24 +136,46 @@
       <div id="catMsg"></div>
     </div>
 
-    <!-- تب کاربران -->
+    <!-- تب کاربران - جدید با لیست -->
     <div id="tab-users" class="card hidden">
-      <h3>مدیریت کاربران</h3>
-      <p class="small">کاربران در شیت Users ذخیره می‌شوند. رمزها هش می‌شوند.</p>
-      <div class="grid2">
-        <input id="newUser" placeholder="نام کاربری">
-        <input id="newPass" placeholder="رمز (حداقل 4)">
-        <select id="newRole"><option value="user">user - دانش‌آموز</option><option value="admin">admin - مدیر</option></select>
-        <select id="newActive"><option value="yes">فعال</option><option value="no">غیرفعال</option></select>
+      <h3>👥 مدیریت کاربران</h3>
+      <p class="small">کاربران در شیت <code>Users</code> ذخیره می‌شوند. هر تغییری (حذف/غیرفعال/تغییر نقش) مستقیم در شیت اعمال می‌شود. رمزها هش شده‌اند.</p>
+      
+      <div style="background:#f9fafb; padding:12px; border-radius:10px; margin:10px 0;">
+        <h4 style="margin:0 0 8px;">➕ ساخت کاربر جدید</h4>
+        <div class="grid2">
+          <input id="newUser" placeholder="نام کاربری (انگلیسی)">
+          <input id="newPass" placeholder="رمز (حداقل 4)">
+          <select id="newRole">
+            <option value="user">user — دانش‌آموز (فقط مرور)</option>
+            <option value="admin">admin — مدیر کامل (همه دسترسی)</option>
+            <option value="editor">editor — ویراستار (فقط سوالات)</option>
+          </select>
+          <select id="newActive"><option value="yes">فعال</option><option value="no">غیرفعال</option></select>
+        </div>
+        <button onclick="createUser()">➕ ساخت کاربر</button>
+        <div id="userMsg"></div>
+        <p class="small" style="margin-top:8px;">
+          <b>دسترسی‌ها:</b> <span class="badge-admin">admin</span> = حذف/اضافه سوال + دسته + کاربر + لاگ<br>
+          <span class="badge-user">editor</span> = فقط افزودن/ویرایش سوال و دسته (نمیتواند کاربر بسازد)<br>
+          <span class="badge">user</span> = فقط مرور سوالات
+        </p>
       </div>
-      <button onclick="createUser()">➕ ساخت کاربر</button>
-      <div id="userMsg"></div>
-      <hr>
-      <button class="secondary" onclick="loadLogs('study')">نمایش لاگ مطالعه</button>
-      <button class="secondary" onclick="loadLogs('exam')">نمایش لاگ آزمون</button>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin:12px 0 6px;">
+        <h4 style="margin:0;">📋 لیست کاربران (<span id="userCount">0</span>)</h4>
+        <button class="ghost" onclick="loadUsers()">🔄 بروزرسانی</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>ردیف</th><th>نام کاربری</th><th>نقش</th><th>وضعیت</th><th>تاریخ ساخت</th><th>عملیات</th></tr></thead>
+          <tbody id="userTbody"><tr><td colspan="6" class="small" style="text-align:center;">برای دیدن لیست، وارد شوید...</td></tr></tbody>
+        </table>
+      </div>
+      <div id="userListMsg"></div>
     </div>
 
-    <!-- تب لاگ -->
+    <!-- تب لاگ - فارسی شده -->
     <div id="tab-logs" class="card hidden">
       <div class="flex">
         <button onclick="loadLogs('exam')">📝 لاگ آزمون</button>
@@ -157,12 +183,14 @@
         <button class="ghost" onclick="exportLogsCSV()">⬇️ خروجی CSV</button>
       </div>
       <div id="logInfo" class="small"></div>
+      <div id="logError" class="alert alert-err hidden"></div>
       <div class="table-wrap"><table><thead id="logHead"></thead><tbody id="logBody"></tbody></table></div>
+      <p class="small" style="margin-top:8px;">ستون‌ها فارسی نمایش داده می‌شوند. دسته <code>history_geo</code> به صورت <b>تاریخ و جغرافیا</b> ترجمه می‌شود. اگر خطای <b>Unexpected token</b> دیدید یعنی توکن منقضی شده — دوباره وارد شوید یا مطمئن شوید deployment روی <b>Anyone</b> است.</p>
     </div>
 
     <!-- تب تنظیمات -->
     <div id="tab-settings" class="card hidden">
-      <h3>تغییر رمز مدیر</h3>
+      <h3>تغییر رمز مدیر فعلی ( <span id="currentUserName"></span> )</h3>
       <input id="oldPass" type="password" placeholder="رمز فعلی">
       <input id="newPass1" type="password" placeholder="رمز جدید (حداقل 6)">
       <input id="newPass2" type="password" placeholder="تکرار رمز جدید">
@@ -171,18 +199,27 @@
       <hr>
       <h4>پشتیبان‌گیری</h4>
       <button class="secondary" onclick="backupAll()">⬇️ دانلود پشتیبان کامل (JSON)</button>
-      <p class="small">شامل دسته‌ها + سوالات + نسخه</p>
+      <p class="small">شامل دسته‌ها + ۴۰۰ سوال + نسخه — همین فایل را با <b>وارد کردن JSON</b> می‌توانید برگردانید.</p>
       <div class="alert alert-warn">
-        <b>استقرار:</b> پس از تغییرات، فایل <code>assets/questions_db.json</code> را روی هاست آپلود کنید یا با «ذخیره در سرور» در شیت ذخیره کنید تا حالت امن سرور هم به‌روز شود.
+        <b>استقرار ساده:</b> بعد از هر تغییر (حذف/اضافه سوال) فقط <b>ذخیره در سرور</b> را بزنید کافیست. نیازی به آپلود `assets/questions_db.json` روی گیت‌هاب نیست، مگر اینکه بخواهید حالت آفلاین (بدون گوگل) هم آپدیت باشد. برای حالت امن، فقط <b>ذخیره در سرور</b> کافیست.
       </div>
+      <hr>
+      <h4>فایل‌های گیت‌هاب</h4>
+      <p class="small">فقط این ۳ فایل را به گیت‌هاب بفرستید، بقیه لازم نیست:</p>
+      <code style="background:#f3f4f6; padding:8px; display:block; border-radius:8px; text-align:left; direction:ltr;">
+        index.html<br>
+        admin.html (یا admin_v2.1.html → تغییر نام به admin.html)<br>
+        assets/questions_db.json
+      </code>
+      <p class="small">پوشه‌های <code>gas/</code> , <code>docs/</code> , <code>legacy/</code> و فایل‌های راهنما را پیش خودتان نگه دارید.</p>
     </div>
 
   </div>
 
-  <footer>پنل مدیریت امن ۲.۰ - توکن محور + هش رمز - طراحی AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۲.۱ — فارسی‌سازی لاگ + مدیریت کاربران — AminSystem2000</footer>
 </div>
 
-<!-- مودال ویرایش -->
+<!-- مودال ویرایش سوال -->
 <div id="modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:12px; z-index:99;">
   <div class="card" style="max-width:640px; width:100%; max-height:90vh; overflow:auto;">
     <h3 id="modalTitle">ویرایش سوال</h3>
@@ -205,7 +242,7 @@
 </div>
 
 <script>
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxb7_ftCamS7Vfq7fm_wUFxPgF14klFs5wpg-90SHH1Fx1RgjVI87ikPR_SPuLS2GCp/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
 const DB_URL = "assets/questions_db.json";
 
 let DB = null;
@@ -214,10 +251,20 @@ let currentUser = localStorage.getItem("admin_user") || "";
 let editingIndex = -1;
 let lastLogs = {header:[], rows:[]};
 
+// نگاشت فارسی
+const HEADER_FA = {
+  "timestamp":"زمان", "time":"زمان", "username":"نام کاربری", "studyName":"نام مطالعه", "category":"دسته", "name":"نام", "studentId":"شماره دانش‌آموزی", "score":"نمره", "total":"از", "durationSec":"زمان (ثانیه)", "duration":"زمان", "attemptId":"شناسه آزمون", "ip":"IP", "userAgent":"مرورگر", "answersJson":"پاسخ‌ها", "answers":"پاسخ‌ها"
+};
+const CATEGORY_FA = {
+  "history_geo":"تاریخ و جغرافیا", "literature":"شعر و ادبیات", "art_music":"موسیقی و هنر", "math_iq":"هوش و ریاضی", "general":"عمومی", "نامشخص":"نامشخص"
+};
+function faHeader(h){ return HEADER_FA[h] || h; }
+function faCategory(c){ return CATEGORY_FA[c] || c; }
+
 function showMsg(elId, text, ok=true){
   const el=document.getElementById(elId);
   el.innerHTML = `<div class="alert ${ok?'alert-ok':'alert-err'}">${text}</div>`;
-  setTimeout(()=> el.innerHTML="", 4000);
+  setTimeout(()=> el.innerHTML="", 6000);
 }
 
 // ============ ورود ============
@@ -228,7 +275,9 @@ async function doLogin(){
   document.getElementById("btnLogin").disabled=true;
   try{
     const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminLogin", username:u, password:p})});
-    const d=await r.json();
+    const text = await r.text();
+    let d;
+    try{ d=JSON.parse(text); } catch(e){ throw new Error("پاسخ غیرمنتظره از سرور (HTML). مطمئن شوید deployment روی Anyone است. متن: "+text.slice(0,120)); }
     if(!d.ok) throw new Error(d.error||"خطا");
     token=d.token;
     currentUser=d.username;
@@ -247,18 +296,22 @@ function showDashboard(){
   document.getElementById("welcome").textContent = "سلام، "+currentUser+" ";
   document.getElementById("roleBadge").textContent="admin";
   document.getElementById("tokenInfo").textContent="توکن فعال - انقضا 2 ساعت";
+  document.getElementById("currentUserName").textContent = currentUser;
   verifyToken();
   loadDB();
+  loadUsers();
 }
 function verifyToken(){
   if(!token) return;
   fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})})
-  .then(r=>r.json()).then(d=>{
-    if(!d.ok){
-      logout();
-      alert("توکن منقضی شد، دوباره وارد شوید");
+  .then(r=>r.text()).then(t=>{
+    try{
+      const d=JSON.parse(t);
+      if(!d.ok){ logout(); alert("توکن منقضی شد، دوباره وارد شوید"); }
+    } catch(e){
+      logout(); alert("توکن نامعتبر - دوباره وارد شوید");
     }
-  });
+  }).catch(()=>{});
 }
 function logout(){
   localStorage.removeItem("admin_token");
@@ -270,24 +323,23 @@ function switchTab(name){
   ["questions","categories","users","logs","settings"].forEach(n=>{
     document.getElementById("tab-"+n).classList.toggle("hidden", n!==name);
   });
+  if(name==='users') loadUsers();
 }
 
 // ============ بانک ============
 async function loadDB(){
-  // اول سعی کن از سرور بگیر
   try{
     if(token){
       const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetQuestions", token:token})});
-      const d=await r.json();
+      const text=await r.text();
+      let d; try{ d=JSON.parse(text);} catch(e){ throw new Error("پاسخ سرور JSON نیست"); }
       if(d.ok && d.db && d.db.questions && d.db.questions.length){
         DB=d.db;
-        console.log("Loaded from server", DB.questions.length);
         renderAll();
         return;
       }
     }
   } catch(e){ console.warn("server load failed",e); }
-  // fallback به فایل محلی
   try{
     const r=await fetch(DB_URL,{cache:"no-store"});
     DB=await r.json();
@@ -303,25 +355,26 @@ async function loadDB(){
   }
 }
 async function loadFromServer(){
-  token && await loadDB();
+  await loadDB();
+  await loadUsers();
   showMsg("saveMsg","بارگیری شد",true);
 }
 function renderAll(){
   renderQuestions();
   renderCategories();
   populateFilters();
-  document.getElementById("qCount").textContent = DB.questions.length;
+  document.getElementById("qCount").textContent = DB ? DB.questions.length : 0;
 }
 function populateFilters(){
   const sel=document.getElementById("filterCat");
   const mCat=document.getElementById("mCat");
+  if(!DB) return;
   sel.innerHTML='<option value="">همه دسته‌ها</option>';
   mCat.innerHTML='';
   DB.categories.forEach(c=>{
     const o=document.createElement("option"); o.value=c.id; o.textContent=c.label; sel.appendChild(o);
     const o2=document.createElement("option"); o2.value=c.id; o2.textContent=c.label; mCat.appendChild(o2);
   });
-  // گروه‌ها را هم پویا کن
   const gSel=document.getElementById("filterGroup");
   const groups=[...new Set(DB.questions.map(q=>q.group))];
   gSel.innerHTML='<option value="">همه گروه‌ها</option>';
@@ -331,6 +384,7 @@ function populateFilters(){
 }
 function renderQuestions(){
   const tbody=document.getElementById("qTbody");
+  if(!DB){ tbody.innerHTML="<tr><td colspan=7>در حال بارگیری...</td></tr>"; return; }
   const q=document.getElementById("searchQ").value.trim();
   const fc=document.getElementById("filterCat").value;
   const fg=document.getElementById("filterGroup").value;
@@ -338,7 +392,6 @@ function renderQuestions(){
   if(fc) list=list.filter(x=>x.category===fc);
   if(fg) list=list.filter(x=>x.group===fg);
   if(q) list=list.filter(x=> x.q.includes(q) || x.a.some(a=>a.includes(q)));
-  // صفحه‌بندی ساده: فقط 100 تا اول
   const show=list.slice(0,200);
   tbody.innerHTML="";
   show.forEach((item, idx)=>{
@@ -346,8 +399,8 @@ function renderQuestions(){
     const tr=document.createElement("tr"); tr.className="qrow";
     tr.innerHTML=`
       <td>${realIdx+1}</td>
-      <td><span class="badge">${(DB.categories.find(c=>c.id===item.category)||{}).label||item.category}</span></td>
-      <td>${item.group}</td>
+      <td><span class="badge">${escapeHtml((DB.categories.find(c=>c.id===item.category)||{}).label||item.category)}</span></td>
+      <td>${escapeHtml(item.group)}</td>
       <td style="max-width:280px; white-space:pre-wrap;">${escapeHtml(item.q)}</td>
       <td style="font-size:11px;">${item.a.map(a=>`<div>${escapeHtml(a)}</div>`).join("")}</td>
       <td style="color:#065f46; font-weight:700;">${escapeHtml(item.c)}</td>
@@ -356,11 +409,12 @@ function renderQuestions(){
     tbody.appendChild(tr);
   });
   if(list.length>200){
-    const tr=document.createElement("tr"); tr.innerHTML=`<td colspan="7" style="text-align:center;" class="small">نمایش 200 از ${list.length} - از فیلتر استفاده کنید</td>`; tbody.appendChild(tr);
+    const tr=document.createElement("tr"); tr.innerHTML=`<td colspan="7" style="text-align:center;" class="small">نمایش 200 از ${list.length}</td>`; tbody.appendChild(tr);
   }
 }
 function renderCategories(){
   const grid=document.getElementById("catGrid");
+  if(!DB) return;
   grid.innerHTML="";
   DB.categories.forEach((cat, idx)=>{
     const div=document.createElement("div");
@@ -415,12 +469,13 @@ function saveModal(){
   if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
   closeModal();
   renderAll();
-  showMsg("saveMsg","ذخیره محلی شد - برای اعمال نهایی «ذخیره در سرور» را بزنید",true);
+  showMsg("saveMsg","ذخیره محلی شد - حتما «ذخیره در سرور» را بزنید",true);
 }
 function delQ(idx){
   if(!confirm("حذف سوال #"+(idx+1)+"؟")) return;
   DB.questions.splice(idx,1);
   renderAll();
+  showMsg("saveMsg","حذف محلی شد - برای اعمال نهایی «ذخیره در سرور» را بزنید",true);
 }
 
 // ============ دسته‌ها ============
@@ -460,17 +515,17 @@ function delCat(idx){
 
 // ============ ذخیره/بارگیری ============
 async function saveToServer(){
-  if(!token) return alert("توکن ندارید");
+  if(!token) return alert("توکن ندارید - دوباره وارد شوید");
   const btn=document.getElementById("btnSaveServer");
   btn.disabled=true; btn.textContent="در حال ذخیره...";
   try{
     const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminSaveQuestions", token:token, db:DB})});
-    const d=await r.json();
+    const text=await r.text();
+    let d; try{ d=JSON.parse(text); } catch(e){ throw new Error("پاسخ سرور JSON نیست: "+text.slice(0,150)); }
     if(!d.ok) throw new Error(d.error);
-    showMsg("saveMsg", `✅ ذخیره شد (${d.count} سوال) روی سرور`, true);
-    // همچنین پیشنهاد دانلود فایل
+    showMsg("saveMsg", `✅ ذخیره شد (${d.count} سوال در ${d.chunks} تکه) روی سرور`, true);
   } catch(e){
-    showMsg("saveMsg","خطا: "+e.message + " - می‌توانید خروجی JSON را دانلود و دستی روی هاست آپلود کنید", false);
+    showMsg("saveMsg","خطا: "+e.message, false);
   } finally{ btn.disabled=false; btn.textContent="💾 ذخیره در سرور"; }
 }
 function exportJSON(){
@@ -485,21 +540,58 @@ function importJSON(e){
   reader.onload=()=>{
     try{
       const j=JSON.parse(reader.result);
-      if(!j.questions || !j.categories) throw new Error("فرمت نامعتبر");
-      if(!confirm(`وارد کردن ${j.questions.length} سوال و ${j.categories.length} دسته؟ (جایگزین می‌شود)`)) return;
+      if(!j.questions || !j.categories) throw new Error("فرمت نامعتبر - باید شامل categories و questions باشد");
+      if(!confirm(`وارد کردن ${j.questions.length} سوال و ${j.categories.length} دسته؟ (جایگزین کل بانک می‌شود)`)) return;
       DB=j;
       renderAll();
-      showMsg("saveMsg","وارد شد - ذخیره در سرور را بزنید",true);
+      showMsg("saveMsg","وارد شد - حتما «ذخیره در سرور» را بزنید تا در گوگل ثبت شود",true);
     } catch(err){ alert("خطا: "+err.message); }
   };
   reader.readAsText(f, "utf-8");
   e.target.value="";
 }
-function backupAll(){
-  exportJSON();
-}
+function backupAll(){ exportJSON(); }
 
-// ============ کاربران ============
+// ============ کاربران - جدید کامل ============
+async function loadUsers(){
+  const tbody=document.getElementById("userTbody");
+  const countEl=document.getElementById("userCount");
+  tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;">در حال بارگیری...</td></tr>`;
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminListUsers", token:token})});
+    const text=await r.text();
+    let d; try{ d=JSON.parse(text);} catch(e){ throw new Error("پاسخ سرور JSON نیست: "+text.slice(0,120)); }
+    if(!d.ok) throw new Error(d.error);
+    countEl.textContent = d.users.length;
+    tbody.innerHTML="";
+    if(d.users.length===0){
+      tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;">کاربری نیست</td></tr>`;
+      return;
+    }
+    d.users.forEach((u, idx)=>{
+      const tr=document.createElement("tr");
+      const roleBadge = u.role==='admin' ? `<span class="badge badge-admin">admin</span>` : u.role==='editor' ? `<span class="badge" style="background:#e0e7ff;color:#3730a3">editor</span>` : `<span class="badge badge-user">user</span>`;
+      const activeBadge = u.active==='yes' ? `<span style="color:#065f46">✅ فعال</span>` : `<span style="color:#991b1b">⛔ غیرفعال</span>`;
+      tr.innerHTML=`
+        <td>${idx+1}</td>
+        <td><b>${escapeHtml(u.username)}</b> ${u.username===currentUser ? '<span class="small">(شما)</span>':''}</td>
+        <td>${roleBadge}</td>
+        <td>${activeBadge}</td>
+        <td style="font-size:11px;">${escapeHtml(u.createdAt||"")}</td>
+        <td>
+          <div class="actions">
+            <button class="ghost" onclick="toggleUser('${escapeHtml(u.username)}','${u.active}')">تغییر وضعیت</button>
+            <button class="secondary" onclick="changeUserRole('${escapeHtml(u.username)}','${u.role}')">نقش</button>
+            <button class="danger" onclick="deleteUser('${escapeHtml(u.username)}')" ${u.username===currentUser?'disabled':''}>حذف</button>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch(e){
+    tbody.innerHTML=`<tr><td colspan="6" class="alert-err">خطا: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
 async function createUser(){
   const u=document.getElementById("newUser").value.trim();
   const p=document.getElementById("newPass").value;
@@ -508,42 +600,110 @@ async function createUser(){
   if(!u||!p) return showMsg("userMsg","نام و رمز الزامی",false);
   try{
     const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminCreateUser", token:token, username:u, password:p, role:role, active:active})});
-    const d=await r.json();
+    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
     if(!d.ok) throw new Error(d.error);
-    showMsg("userMsg","کاربر ساخته شد ✅",true);
+    showMsg("userMsg","کاربر ساخته شد ✅ مستقیم در شیت Users هم ثبت شد",true);
     document.getElementById("newUser").value=""; document.getElementById("newPass").value="";
+    loadUsers();
   } catch(e){ showMsg("userMsg","خطا: "+e.message,false); }
 }
+async function deleteUser(username){
+  if(!confirm(`حذف کاربر "${username}"؟ این عمل در شیت هم حذف می‌شود و غیرقابل بازگشت است!`)) return;
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminDeleteUser", token:token, username:username})});
+    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
+    if(!d.ok) throw new Error(d.error);
+    showMsg("userListMsg","حذف شد ✅",true);
+    loadUsers();
+  } catch(e){ showMsg("userListMsg","خطا: "+e.message,false); }
+}
+async function toggleUser(username, currentActive){
+  const newActive = currentActive==='yes' ? 'no' : 'yes';
+  if(!confirm(`وضعیت "${username}" به ${newActive==='yes'?'فعال':'غیرفعال'} تغییر کند؟`)) return;
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminUpdateUser", token:token, username:username, active:newActive})});
+    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
+    if(!d.ok) throw new Error(d.error);
+    loadUsers();
+  } catch(e){ showMsg("userListMsg","خطا: "+e.message,false); }
+}
+async function changeUserRole(username, currentRole){
+  const newRole = prompt(`نقش جدید برای ${username}:\nadmin = مدیر کامل\neditor = فقط سوالات\nuser = دانش‌آموز`, currentRole);
+  if(newRole===null) return;
+  if(!['admin','editor','user'].includes(newRole.trim())) return alert("نقش باید admin یا editor یا user باشد");
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminUpdateUser", token:token, username:username, role:newRole.trim()})});
+    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
+    if(!d.ok) throw new Error(d.error);
+    loadUsers();
+  } catch(e){ showMsg("userListMsg","خطا: "+e.message,false); }
+}
 
-// ============ لاگ ============
+// ============ لاگ - فارسی و رفع خطا ============
 async function loadLogs(type){
   switchTab("logs");
-  document.getElementById("logInfo").textContent="در حال بارگیری...";
+  const info=document.getElementById("logInfo");
+  const errEl=document.getElementById("logError");
+  errEl.classList.add("hidden"); errEl.textContent="";
+  info.textContent="در حال بارگیری...";
+  const thead=document.getElementById("logHead");
+  const tbody=document.getElementById("logBody");
+  thead.innerHTML=""; tbody.innerHTML="";
   try{
     const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetLogs", token:token, logType:type})});
-    const d=await r.json();
+    const text=await r.text();
+    let d;
+    try{ d=JSON.parse(text); } catch(e){
+      if(text.trim().startsWith("<")){
+        throw new Error("پاسخ HTML از گوگل (توکن منقضی یا دسترسی deployment روی Anyone نیست). دوباره وارد شوید.");
+      }
+      throw new Error("پاسخ JSON نیست: "+text.slice(0,150));
+    }
     if(!d.ok) throw new Error(d.error);
+    if(!d.header || !d.rows){
+      throw new Error("ساختار لاگ نامعتبر");
+    }
     lastLogs=d;
-    document.getElementById("logInfo").textContent=`نوع: ${type} - کل: ${d.total} - نمایش ${d.rows.length} ردیف آخر`;
-    const thead=document.getElementById("logHead");
-    const tbody=document.getElementById("logBody");
-    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    info.textContent=`نوع: ${type==='exam'?'آزمون':'مطالعه'} — کل: ${d.total} — نمایش ${d.rows.length} ردیف آخر`;
+    // فارسی‌سازی هدر
+    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(faHeader(h))}</th>`).join("")+"</tr>";
     tbody.innerHTML="";
+    if(d.rows.length===0){
+      tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center; padding:20px;">هنوز لاگی ثبت نشده</td></tr>`;
+      return;
+    }
+    // پیدا کن ستون category کجاست تا فارسی کنی
+    const catIdx = d.header.indexOf("category");
     d.rows.slice().reverse().forEach(row=>{
       const tr=document.createElement("tr");
-      tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c))}</td>`).join("");
+      tr.innerHTML=row.map((c, idx)=>{
+        let val = String(c ?? "");
+        if(idx===catIdx) val = faCategory(val);
+        // زمان را کوتاه کن
+        if(idx===0 && val.includes("T")){ try{ const dt=new Date(val); val = dt.toLocaleString('fa-IR'); } catch(e){} }
+        return `<td>${escapeHtml(val)}</td>`;
+      }).join("");
       tbody.appendChild(tr);
     });
   } catch(e){
-    document.getElementById("logInfo").textContent="خطا: "+e.message;
+    info.textContent="";
+    errEl.textContent="خطا: "+e.message;
+    errEl.classList.remove("hidden");
+    console.error(e);
   }
 }
 function exportLogsCSV(){
-  if(!lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
-  const csv=[lastLogs.header.join(",")].concat(lastLogs.rows.map(r=> r.map(c=> `"${String(c).replace(/"/g,'""')}"`).join(","))).join("\n");
+  if(!lastLogs.rows || !lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
+  // هدر فارسی برای CSV
+  const faHeaders = lastLogs.header.map(h=> faHeader(h));
+  const csv=[faHeaders.join(",")].concat(lastLogs.rows.map(r=> r.map((c,idx)=>{
+    let v=String(c ?? "");
+    if(idx===lastLogs.header.indexOf("category")) v=faCategory(v);
+    return `"${v.replace(/"/g,'""')}"`;
+  }).join(","))).join("\n");
   const blob=new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
   const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download="logs.csv"; a.click();
+  const a=document.createElement("a"); a.href=url; a.download=`logs_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 
 // ============ رمز ============
@@ -556,7 +716,7 @@ async function changePass(){
   if(n1.length<6) return showMsg("passMsg","رمز حداقل 6 کاراکتر",false);
   try{
     const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminChangePassword", token:token, oldPassword:o, newPass:n1})});
-    const d=await r.json();
+    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
     if(!d.ok) throw new Error(d.error);
     showMsg("passMsg","رمز تغییر کرد ✅ - دوباره وارد شوید",true);
     setTimeout(logout,1500);
@@ -569,7 +729,6 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','
 if(token){
   showDashboard();
 }
-
 </script>
 </body>
 </html>
