@@ -181,6 +181,7 @@
         <button onclick="loadLogs('exam')">📝 لاگ آزمون</button>
         <button onclick="loadLogs('study')">📘 لاگ مطالعه</button>
         <button class="ghost" onclick="exportLogsCSV()">⬇️ خروجی CSV</button>
+        <button class="danger" id="btnClearLogs" onclick="clearLogs()">🗑️ حذف لاگ‌ها (فقط ادمین)</button>
       </div>
       <div id="logInfo" class="small"></div>
       <div id="logError" class="alert alert-err hidden"></div>
@@ -283,23 +284,39 @@ async function doLogin(){
     currentUser=d.username;
     localStorage.setItem("admin_token", token);
     localStorage.setItem("admin_user", currentUser);
+    localStorage.setItem("admin_role", d.role||"admin");
     showDashboard();
     showMsg("loginMsg","ورود موفق ✅",true);
   } catch(e){
     showMsg("loginMsg", "خطا: "+e.message, false);
   } finally{ document.getElementById("btnLogin").disabled=false; }
 }
+let currentRole = localStorage.getItem("admin_role") || "admin";
+function isEditor(){ return String(currentRole||"").toLowerCase()==="editor"; }
+function isAdmin(){ return String(currentRole||"").toLowerCase()==="admin"; }
 function showDashboard(){
   if(!token) return;
+  currentRole = localStorage.getItem("admin_role") || "admin";
   document.getElementById("loginCard").classList.add("hidden");
   document.getElementById("dashboard").classList.remove("hidden");
   document.getElementById("welcome").textContent = "سلام، "+currentUser+" ";
-  document.getElementById("roleBadge").textContent="admin";
-  document.getElementById("tokenInfo").textContent="توکن فعال - انقضا 2 ساعت";
+  document.getElementById("roleBadge").textContent=currentRole;
+  document.getElementById("roleBadge").className = isAdmin() ? "badge badge-admin" : "badge";
+  document.getElementById("tokenInfo").textContent="توکن فعال - انقضا 2 ساعت" + (isEditor() ? " — دسترسی ویراستار: فقط سوالات خودتان" : "");
   document.getElementById("currentUserName").textContent = currentUser;
+  // ویراستار: تب کاربران را مخفی کن و دکمه‌های خطرناک را غیرفعال
+  const usersTab = document.querySelector('[data-tab=\"users\"]');
+  if(usersTab) usersTab.style.display = isEditor() ? "none" : "";
+  const clearBtn = document.getElementById("btnClearLogs");
+  if(clearBtn) clearBtn.style.display = isAdmin() ? "" : "none";
+  const saveBtn = document.getElementById("btnSaveServer");
+  if(saveBtn && isEditor()) saveBtn.title = "ویراستار فقط سوالات خودش را ذخیره می‌کند - حذف کل بانک ممنوع";
   verifyToken();
   loadDB();
-  loadUsers();
+  if(isAdmin()) loadUsers(); else {
+    document.getElementById("userTbody").innerHTML=`<tr><td colspan=\"6\" style=\"text-align:center;\">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
+    document.getElementById("userCount").textContent="—";
+  }
 }
 function verifyToken(){
   if(!token) return;
@@ -316,6 +333,7 @@ function verifyToken(){
 function logout(){
   localStorage.removeItem("admin_token");
   localStorage.removeItem("admin_user");
+  localStorage.removeItem("admin_role");
   location.reload();
 }
 function switchTab(name){
@@ -691,6 +709,19 @@ async function loadLogs(type){
     errEl.classList.remove("hidden");
     console.error(e);
   }
+}
+async function clearLogs(){
+  if(!isAdmin()) return alert("⛔ فقط ادمین می‌تواند لاگ‌ها را حذف کند");
+  const t = prompt("کدام لاگ حذف شود؟ بنویس: exam یا study یا all", "exam");
+  if(!t) return;
+  if(!confirm(`حذف لاگ ${t} برای همیشه؟`)) return;
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminClearLogs", token:token, logType:t})});
+    const text=await r.text(); const d=JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    alert("✅ لاگ‌ها حذف شدند");
+    loadLogs(t==="all" ? "exam" : t);
+  } catch(e){ alert("خطا: "+e.message); }
 }
 function exportLogsCSV(){
   if(!lastLogs.rows || !lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
