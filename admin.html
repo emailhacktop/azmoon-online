@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۲.۶ — رفع confetti و خطای HTML و کندی</p>
+  <p>نسخه ۲.۷ — رفع CSV و ذخیره ویراستار</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -196,7 +196,7 @@
     <div id="tab-issues" class="card hidden">
       <h3>⚠️ گزارش ایرادهای ویراستارها</h3>
       <p class="small">ویراستار روی سوالات دیگران فقط می‌تواند «گزارش ایراد» بزند (ویرایش/حذف ندارد). اینجا همه گزارش‌ها را می‌بینید.</p>
-      <div class="flex"><button onclick="loadIssues()">🔄 بارگیری گزارش‌ها</button><button class="ghost" onclick="exportIssuesCSV()">⬇️ خروجی CSV</button></div>
+      <div class="flex"><button onclick="loadIssues()">🔄 بارگیری گزارش‌ها</button><button class="ghost" onclick="exportIssuesCSV()">⬇️ خروجی CSV</button><button class="danger" id="btnClearIssues" onclick="clearIssues()" style="display:none;">🗑️ حذف همه گزارش‌ها (فقط admin اصلی)</button></div>
       <div id="issueInfo" class="small"></div>
       <div id="issueError" class="alert alert-err hidden"></div>
       <div class="table-wrap"><table><thead id="issueHead"></thead><tbody id="issueBody"></tbody></table></div>
@@ -206,7 +206,7 @@
     <div id="tab-audit" class="card hidden">
       <h3>📜 حسابرسی — رد پای مدیران</h3>
       <p class="small">هر کاری که ادمین/ویراستار می‌کند اینجا ثبت می‌شود: ساخت کاربر، حذف کاربر، ذخیره سوالات، حذف لاگ...</p>
-      <div class="flex"><button onclick="loadAudit()">🔄 بارگیری</button><button class="ghost" onclick="exportAuditCSV()">⬇️ خروجی CSV</button></div>
+      <div class="flex"><button onclick="loadAudit()">🔄 بارگیری</button><button class="ghost" onclick="exportAuditCSV()">⬇️ خروجی CSV</button><button class="danger" id="btnClearAudit" onclick="clearAudit()" style="display:none;">🗑️ حذف همه حسابرسی (فقط admin اصلی)</button></div>
       <div id="auditInfo" class="small"></div>
       <div id="auditError" class="alert alert-err hidden"></div>
       <div class="table-wrap"><table><thead id="auditHead"></thead><tbody id="auditBody"></tbody></table></div>
@@ -248,7 +248,7 @@
 
   </div>
 
-  <footer>پنل مدیریت امن ۲.۶ — رفع confetti و کندی — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۲.۷ — رفع CSV و ذخیره ویراستار — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -286,7 +286,9 @@ let lastLogs = {header:[], rows:[]};
 
 // نگاشت فارسی
 const HEADER_FA = {
-  "timestamp":"زمان", "time":"زمان", "username":"نام کاربری", "studyName":"نام مطالعه", "category":"دسته", "name":"نام", "studentId":"شماره دانش‌آموزی", "score":"نمره", "total":"از", "durationSec":"زمان (ثانیه)", "duration":"زمان", "attemptId":"شناسه آزمون", "ip":"IP", "userAgent":"مرورگر", "answersJson":"پاسخ‌ها", "answers":"پاسخ‌ها"
+  "timestamp":"زمان", "time":"زمان", "username":"نام کاربری", "studyName":"نام مطالعه", "category":"دسته", "name":"نام", "studentId":"شماره دانش‌آموزی", "score":"نمره", "total":"از", "durationSec":"زمان (ثانیه)", "duration":"زمان", "attemptId":"شناسه آزمون", "ip":"IP", "userAgent":"مرورگر", "answersJson":"پاسخ‌ها", "answers":"پاسخ‌ها",
+  "reporter":"گزارش‌دهنده", "questionUid":"شناسه سوال", "group":"گروه", "questionText":"متن سوال", "issue":"متن ایراد",
+  "actor":"عامل", "role":"نقش", "action":"عمل", "target":"هدف", "detail":"جزئیات"
 };
 const CATEGORY_FA = {
   "history_geo":"تاریخ و جغرافیا", "literature":"شعر و ادبیات", "art_music":"موسیقی و هنر", "math_iq":"هوش و ریاضی", "general":"عمومی", "نامشخص":"نامشخص"
@@ -356,6 +358,10 @@ function showDashboard(){
   if(btnSave && isEditor()) btnSave.title = "ویراستار فقط سوالات خودش را ذخیره می‌کند - حذف کل بانک ممنوع";
   const clearBtn = document.getElementById("btnClearLogs");
   if(clearBtn) clearBtn.style.display = isMainAdmin() ? "" : "none";
+  const clearIssuesBtn = document.getElementById("btnClearIssues");
+  if(clearIssuesBtn) clearIssuesBtn.style.display = isMainAdmin() ? "" : "none";
+  const clearAuditBtn = document.getElementById("btnClearAudit");
+  if(clearAuditBtn) clearAuditBtn.style.display = isMainAdmin() ? "" : "none";
   // در تنظیمات، بخش بکاپ را برای ویراستار مخفی کن
   const backupSection = document.getElementById("backupSection");
   if(backupSection) backupSection.style.display = isEditor() ? "none" : "";
@@ -900,7 +906,25 @@ async function loadIssues(){
     thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
     tbody.innerHTML="";
     if(d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center;">گزارشی نیست</td></tr>`; return; }
-    d.rows.slice().reverse().forEach(row=>{ const tr=document.createElement("tr"); tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join(""); tbody.appendChild(tr); });
+    const startRow = 2;
+    d.rows.slice().reverse().forEach((row, revIdx)=>{
+      const realRow = d.rows.length - revIdx + 1; // تقریبی، برای حذف از پایین
+      const tr=document.createElement("tr");
+      let html = row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join("");
+      if(isMainAdmin()){
+        // شماره ردیف واقعی برای حذف (از آخر به اول)
+        const actualRow = d.total - revIdx + 1;
+        html += `<td><button class="danger" style="padding:3px 7px; font-size:11px;" onclick="deleteSingleIssue(${actualRow})">🗑️</button></td>`;
+      }
+      tr.innerHTML = html;
+      tbody.appendChild(tr);
+    });
+    if(isMainAdmin()){
+      const htr = thead.querySelector("tr");
+      if(htr && !htr.innerHTML.includes("حذف")){
+        htr.innerHTML += `<th>حذف</th>`;
+      }
+    }
   }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
 }
 async function loadAudit(){
@@ -917,6 +941,34 @@ async function loadAudit(){
     d.rows.slice().reverse().forEach(row=>{ const tr=document.createElement("tr"); tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join(""); tbody.appendChild(tr); });
   }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
 }
+
+async function clearIssues(){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی (admin) می‌تواند گزارش‌ها را حذف کند");
+  if(!confirm("همه گزارش‌های ایراد حذف شوند؟ این عمل غیرقابل بازگشت است!")) return;
+  try{
+    const d = await fetchAdmin("adminClearIssues", {});
+    alert("✅ همه گزارش‌ها حذف شد");
+    loadIssues();
+  }catch(e){ alert("خطا: "+e.message); }
+}
+async function clearAudit(){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی می‌تواند حسابرسی را حذف کند");
+  if(!confirm("همه ردیف‌های حسابرسی حذف شوند؟")) return;
+  try{
+    const d = await fetchAdmin("adminClearAudit", {});
+    alert("✅ حسابرسی پاک شد");
+    loadAudit();
+  }catch(e){ alert("خطا: "+e.message); }
+}
+async function deleteSingleIssue(row){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی");
+  if(!confirm("این گزارش حذف شود؟")) return;
+  try{
+    const d = await fetchAdmin("adminDeleteSingleIssue", {row:row});
+    loadIssues();
+  }catch(e){ alert("خطا: "+e.message); }
+}
+
 function exportIssuesCSV(){ if(!lastIssues.rows.length) return alert("ابتدا بارگیری کنید"); const csv=[lastIssues.header.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\\n"); const b=new Blob(["\\uFEFF"+csv],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="issues.csv"; a.click(); }
 function exportAuditCSV(){ if(!lastAudit.rows.length) return alert("ابتدا بارگیری کنید"); const csv=[lastAudit.header.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\\n"); const b=new Blob(["\\uFEFF"+csv],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="audit.csv"; a.click(); }
 function exportLogsCSV(){
@@ -946,6 +998,56 @@ async function changePass(){
     showMsg("passMsg","رمز تغییر کرد ✅ - دوباره وارد شوید",true);
     setTimeout(logout,1500);
   } catch(e){ showMsg("passMsg","خطا: "+e.message,false); }
+}
+
+
+
+async function clearIssues(){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی (admin) می‌تواند گزارش‌ها را حذف کند");
+  if(!confirm("همه گزارش‌های ایراد حذف شوند؟ این عمل غیرقابل بازگشت است!")) return;
+  try{
+    const d = await fetchAdmin("adminClearIssues", {});
+    alert("✅ همه گزارش‌ها حذف شد");
+    loadIssues();
+  }catch(e){ alert("خطا: "+e.message); }
+}
+async function clearAudit(){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی می‌تواند حسابرسی را حذف کند");
+  if(!confirm("همه ردیف‌های حسابرسی حذف شوند؟")) return;
+  try{
+    const d = await fetchAdmin("adminClearAudit", {});
+    alert("✅ حسابرسی پاک شد");
+    loadAudit();
+  }catch(e){ alert("خطا: "+e.message); }
+}
+async function deleteSingleIssue(row){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی");
+  if(!confirm("این گزارش حذف شود؟")) return;
+  try{
+    const d = await fetchAdmin("adminDeleteSingleIssue", {row:row});
+    loadIssues();
+  }catch(e){ alert("خطا: "+e.message); }
+}
+
+function exportIssuesCSV(){ 
+  if(!lastIssues.rows || !lastIssues.rows.length) return alert("ابتدا بارگیری کنید");
+  const faHeader = lastIssues.header.map(h=> HEADER_FA[h]||h);
+  const csv=[faHeader.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="reports_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+
+function exportAuditCSV(){ 
+  if(!lastAudit.rows || !lastAudit.rows.length) return alert("ابتدا بارگیری کنید");
+  const faHeader = lastAudit.header.map(h=> HEADER_FA[h]||h);
+  const csv=[faHeader.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="audit_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
