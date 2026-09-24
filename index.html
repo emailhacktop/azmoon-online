@@ -414,7 +414,11 @@ async function startExam(){
     }
   } catch(err){
     console.error(err);
-    alert("خطا در شروع آزمون: "+err.message);
+    let msg = err.message||"";
+    if(msg.includes("<!DOCTYPE") || msg.includes("ppConfig") || msg.includes("<html")){
+      msg = "پاسخ HTML از گوگل - احتمالاً اتصال یا deployment مشکل دارد. مطمئن شوید WEB_APP_URL درست است و با VPN خاموش امتحان کنید.";
+    }
+    alert("خطا در شروع آزمون: "+msg + "\n\nاگر این خطا فقط گاهی می‌آید، دکمه «بارگیری از سرور» را نزنید و صفحه را رفرش کنید.");
   } finally {
     btn.disabled=false; btn.textContent="شروع آزمون";
   }
@@ -565,8 +569,22 @@ async function finish(){
       // همچنین لاگ قدیمی برای سازگاری
     } catch(e){
       console.error(e);
-      resultEl.textContent = "خطا در ثبت نتیجه: "+e.message;
-      reviewEl.innerHTML = `<div class="alert alert-warn">پاسخ‌های شما: ${secureAnswers.length} سوال. خطا: ${sanitizeText(e.message)}</div>`;
+      // ذخیره attemptId برای بازیابی بعدی - حتی اگر سرور ثبت کرده باشد
+      try{ localStorage.setItem("last_attemptId", attemptId); localStorage.setItem("last_studentId", studentIdInput.value.trim()); }catch(err){}
+      resultEl.textContent = "⚠️ خطا در دریافت نتیجه (ولی ممکن است در شیت ثبت شده باشد)";
+      const errMsg = sanitizeText(e.message||"");
+      const isHtmlErr = errMsg.includes("<!DOCTYPE") || errMsg.includes("ppConfig");
+      reviewEl.innerHTML = `<div class="alert alert-warn" style="text-align:right;">
+        <b>خطا:</b> ${sanitizeText(e.message)}<br>
+        <span style="font-size:12px;">attemptId: <code>${sanitizeText(attemptId||"")}</code> — این کد را به مدیر بدهید تا نتیجه را بازیابی کند.</span><br>
+        ${isHtmlErr ? '<span style="font-size:11px; color:#991b1b;">این خطای HTML معمولاً به معنی توکن/اتصال است - نگران نباشید، نتیجه در Google Sheet ذخیره شده.</span><br>' : ''}
+        <div class="flex" style="margin-top:8px;">
+          <button onclick="retrySubmit()">🔄 تلاش مجدد ارسال</button>
+          <button class="secondary" onclick="recoverResult()">🔍 بازیابی نتیجه از سرور</button>
+        </div>
+        <p style="font-size:11px; color:#6b7280; margin-top:6px;">اگر دوباره آزمون دادید و می‌خواهید قبلی پاک شود، از مدیر بخواهید لاگ شما را (با همین attemptId) در تب لاگ حذف کند تا مجدد آزمون دهید.</p>
+      </div>`;
+      // همچنین سعی کن به صورت آفلاین نتیجه را از لوکال نشان بدهی اگر ممکن بود
     }
   } else {
     // آفلاین
@@ -599,6 +617,72 @@ async function finish(){
   }
 }
 
+async function retrySubmit(){
+  if(!attemptId) return alert("attemptId ندارید - دوباره آزمون را شروع کنید");
+  resultEl.textContent = "تلاش مجدد...";
+  reviewEl.innerHTML = "<p style='color:#6b7280'>در حال ارسال دوباره...</p>";
+  try{
+    const resp = await fetch(WEB_APP_URL, {
+      method:"POST",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({
+        action:"submitExam",
+        attemptId: attemptId,
+        name: userName,
+        studentId: studentIdInput.value.trim(),
+        category: category,
+        answers: secureAnswers,
+        ip: await getClientIP(), userAgent: navigator.userAgent
+      })
+    });
+    const text = await resp.text();
+    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML از سرور - اتصال را چک کنید");
+    const data = JSON.parse(text);
+    if(!data.ok) throw new Error(data.error);
+    // نمایش موفق
+    resultEl.textContent = `${userName}\nنمره: ${data.score} از ${data.total}` + (data.overtime ? " (زمان اضافه)" : "") + (data.recovered ? " (بازیابی شد)" : "");
+    document.getElementById("elapsedInfo").textContent = `زمان: ${Math.floor(data.elapsed/60)}:${String(data.elapsed%60).padStart(2,'0')}`;
+    let html = `<table><tr><th>سوال</th><th>پاسخ شما</th><th>پاسخ صحیح</th></tr>`;
+    (data.review||[]).forEach(r=>{ html += `<tr class="${r.ok?'correct':'wrong'}"><td>${sanitizeText(r.q)}</td><td>${sanitizeText(r.user)}</td><td>${sanitizeText(r.correct)}</td></tr>`; });
+    html+="</table>";
+    reviewEl.innerHTML = html;
+    if(data.score===data.total) confetti({particleCount:220, spread:120, origin:{y:0.6}});
+  }catch(e){
+    resultEl.textContent = "باز هم خطا: "+e.message;
+    reviewEl.innerHTML += `<div class="alert alert-err" style="margin-top:8px;">خطا: ${sanitizeText(e.message)}<br>اگر نتیجه در شیت ثبت شده، مدیر می‌تواند از تب لاگ آن را ببیند یا با attemptId بازیابی کند.</div>`;
+  }
+}
+async function recoverResult(){
+  const at = attemptId || localStorage.getItem("last_attemptId") || prompt("attemptId را وارد کنید (در بالا نمایش داده شد):");
+  if(!at) return;
+  resultEl.textContent = "در حال بازیابی...";
+  try{
+    const resp = await fetch(WEB_APP_URL, {
+      method:"POST",
+      headers: {"Content-Type":"text/plain;charset=utf-8"},
+      body: JSON.stringify({action:"getExamResult", attemptId: at, studentId: studentIdInput.value.trim()})
+    });
+    const text = await resp.text();
+    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML");
+    const d = JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    if(d.score!==undefined){
+      resultEl.textContent = `${d.name||userName}\nنمره: ${d.score} از ${d.total} (بازیابی)`;
+      document.getElementById("elapsedInfo").textContent = `شناسه: ${d.attemptId}`;
+      let html = `<table><tr><th>فیلد</th><th>مقدار</th></tr>`;
+      html += `<tr><td>دسته</td><td>${sanitizeText(d.category||"")}</td></tr>`;
+      html += `<tr><td>نمره</td><td>${d.score} / ${d.total}</td></tr>`;
+      if(d.answersJson) html += `<tr><td>پاسخ‌ها</td><td style="font-size:11px; word-break:break-all;">${sanitizeText(String(d.answersJson).slice(0,500))}</td></tr>`;
+      html += "</table>";
+      reviewEl.innerHTML = html;
+    } else {
+      resultEl.textContent = "نتیجه یافت شد";
+      reviewEl.innerHTML = `<pre style="text-align:left; direction:ltr; font-size:11px;">${sanitizeText(JSON.stringify(d,null,2))}</pre>`;
+    }
+  }catch(e){
+    resultEl.textContent = "بازیابی ناموفق: "+e.message;
+  }
+}
 function shareResult(){
   const text = resultEl.textContent + "\n" + location.href;
   if(navigator.share){

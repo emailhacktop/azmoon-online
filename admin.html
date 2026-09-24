@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۲.۱ — مدیریت کاربران، فارسی‌سازی لاگ، ذخیره تکه‌تکه</p>
+  <p>نسخه ۲.۴ — دسترسی دقیق، حسابرسی، گزارش ایراد، حذف تکی لاگ</p>
 </header>
 
 <div class="container">
@@ -89,6 +89,8 @@
       <div class="tab" data-tab="categories" onclick="switchTab('categories')">📁 دسته‌بندی‌ها</div>
       <div class="tab" data-tab="users" onclick="switchTab('users')">👥 کاربران</div>
       <div class="tab" data-tab="logs" onclick="switchTab('logs')">📊 لاگ‌ها</div>
+      <div class="tab" data-tab="issues" onclick="switchTab('issues')">⚠️ گزارش ایرادها</div>
+      <div class="tab" data-tab="audit" onclick="switchTab('audit')">📜 حسابرسی</div>
       <div class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ تنظیمات & رمز</div>
     </div>
 
@@ -187,6 +189,32 @@
       <div id="logError" class="alert alert-err hidden"></div>
       <div class="table-wrap"><table><thead id="logHead"></thead><tbody id="logBody"></tbody></table></div>
       <p class="small" style="margin-top:8px;">ستون‌ها فارسی نمایش داده می‌شوند. دسته <code>history_geo</code> به صورت <b>تاریخ و جغرافیا</b> ترجمه می‌شود. اگر خطای <b>Unexpected token</b> دیدید یعنی توکن منقضی شده — دوباره وارد شوید یا مطمئن شوید deployment روی <b>Anyone</b> است.</p>
+    </div>
+
+    <!-- تب گزارش ایرادها -->
+    <div id="tab-issues" class="card hidden">
+      <h3>⚠️ گزارش ایرادهای ویراستارها</h3>
+      <p class="small">ویراستار روی سوالات دیگران فقط می‌تواند «گزارش ایراد» بزند (ویرایش/حذف ندارد). اینجا همه گزارش‌ها را می‌بینید.</p>
+      <div class="flex"><button onclick="loadIssues()">🔄 بارگیری گزارش‌ها</button><button class="ghost" onclick="exportIssuesCSV()">⬇️ خروجی CSV</button></div>
+      <div id="issueInfo" class="small"></div>
+      <div id="issueError" class="alert alert-err hidden"></div>
+      <div class="table-wrap"><table><thead id="issueHead"></thead><tbody id="issueBody"></tbody></table></div>
+    </div>
+
+    <!-- تب حسابرسی -->
+    <div id="tab-audit" class="card hidden">
+      <h3>📜 حسابرسی — رد پای مدیران</h3>
+      <p class="small">هر کاری که ادمین/ویراستار می‌کند اینجا ثبت می‌شود: ساخت کاربر، حذف کاربر، ذخیره سوالات، حذف لاگ...</p>
+      <div class="flex"><button onclick="loadAudit()">🔄 بارگیری</button><button class="ghost" onclick="exportAuditCSV()">⬇️ خروجی CSV</button></div>
+      <div id="auditInfo" class="small"></div>
+      <div id="auditError" class="alert alert-err hidden"></div>
+      <div class="table-wrap"><table><thead id="auditHead"></thead><tbody id="auditBody"></tbody></table></div>
+      <p class="small">ستون detail توضیح کامل را دارد. failCount و lockUntil را پایین ببینید.</p>
+      <div class="alert alert-info small" style="margin-top:10px;">
+        <b>failCount و lockUntil در شیت Users چیست؟</b><br>
+        `failCount` = تعداد تلاش ناموفق ورود (برای قفل ۱۵ دقیقه‌ای ضد حدس رمز) — الان در Cache نگهداری می‌شود و هر ۱۵ دقیقه صفر می‌شود.<br>
+        `lockUntil` = زمان پایان قفل (قدیمی، الان استفاده نمی‌شود چون Cache جایگزین شده). می‌توانید این دو ستون را نادیده بگیرید یا برای دیباگ بگذارید بماند. اگر بخواهید قفل دستی را بردارید، مقدار lockUntil را پاک کنید.
+      </div>
     </div>
 
     <!-- تب تنظیمات -->
@@ -294,6 +322,7 @@ async function doLogin(){
 let currentRole = localStorage.getItem("admin_role") || "admin";
 function isEditor(){ return String(currentRole||"").toLowerCase()==="editor"; }
 function isAdmin(){ return String(currentRole||"").toLowerCase()==="admin"; }
+function isMainAdmin(){ return String(currentUser||"").trim().toLowerCase()==="admin"; }
 function showDashboard(){
   if(!token) return;
   currentRole = localStorage.getItem("admin_role") || "admin";
@@ -308,7 +337,7 @@ function showDashboard(){
   const usersTab = document.querySelector('[data-tab=\"users\"]');
   if(usersTab) usersTab.style.display = isEditor() ? "none" : "";
   const clearBtn = document.getElementById("btnClearLogs");
-  if(clearBtn) clearBtn.style.display = isAdmin() ? "" : "none";
+  if(clearBtn) clearBtn.style.display = isMainAdmin() ? "" : "none";
   const saveBtn = document.getElementById("btnSaveServer");
   if(saveBtn && isEditor()) saveBtn.title = "ویراستار فقط سوالات خودش را ذخیره می‌کند - حذف کل بانک ممنوع";
   verifyToken();
@@ -338,10 +367,13 @@ function logout(){
 }
 function switchTab(name){
   document.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.dataset.tab===name));
-  ["questions","categories","users","logs","settings"].forEach(n=>{
+  ["questions","categories","users","logs","issues","audit","settings"].forEach(n=>{
     document.getElementById("tab-"+n).classList.toggle("hidden", n!==name);
   });
   if(name==='users') loadUsers();
+  if(name==='issues') loadIssues();
+  if(name==='audit') loadAudit();
+  if(name==='logs') {/* already loads via button */}
 }
 
 // ============ بانک ============
@@ -415,6 +447,19 @@ function renderQuestions(){
   show.forEach((item, idx)=>{
     const realIdx=DB.questions.indexOf(item);
     const tr=document.createElement("tr"); tr.className="qrow";
+    const owner = String(item.owner||"").toLowerCase();
+    const me = String(currentUser||"").toLowerCase();
+    const isOwn = isAdmin() ? true : (owner===me); // ادمین همه را می‌تواند ادیت کند، ویراستار فقط مال خودش (حتی قدیمی بدون owner هم ویراستار نمی‌تواند)
+    // برای ویراستار، سوال دیگران فقط گزارش ایراد
+    let ops = "";
+    if(isEditor() && !isOwn){
+      ops = `<div class="actions"><button class="ghost" onclick="reportIssue('${item.uid}')">⚠️ گزارش ایراد</button><span class="small" style="align-self:center;">مال ${escapeHtml(item.owner||"—")}</span></div>`;
+    } else if(isEditor() && isOwn){
+      ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button></div>`;
+    } else {
+      // admin
+      ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button><span class="small">${escapeHtml(item.owner||"")}</span></div>`;
+    }
     tr.innerHTML=`
       <td>${realIdx+1}</td>
       <td><span class="badge">${escapeHtml((DB.categories.find(c=>c.id===item.category)||{}).label||item.category)}</span></td>
@@ -422,7 +467,7 @@ function renderQuestions(){
       <td style="max-width:280px; white-space:pre-wrap;">${escapeHtml(item.q)}</td>
       <td style="font-size:11px;">${item.a.map(a=>`<div>${escapeHtml(a)}</div>`).join("")}</td>
       <td style="color:#065f46; font-weight:700;">${escapeHtml(item.c)}</td>
-      <td><div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button></div></td>
+      <td>${ops}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -483,7 +528,8 @@ function saveModal(){
   if(!cat||!group||!q) return showMsg("modalMsg","دسته، گروه و متن سوال الزامی",false);
   if(a.length<2) return showMsg("modalMsg","حداقل 2 گزینه",false);
   if(!a.includes(c)) return showMsg("modalMsg","پاسخ صحیح باید یکی از گزینه‌ها باشد",false);
-  const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: editingIndex>=0? DB.questions[editingIndex].id : (DB.questions.length+1), category:cat, group:group, q:q, a:a, c:c};
+  const owner = editingIndex>=0 ? (DB.questions[editingIndex].owner || currentUser) : currentUser;
+  const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: editingIndex>=0? DB.questions[editingIndex].id : (DB.questions.length+1), category:cat, group:group, q:q, a:a, c:c, owner: owner};
   if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
   closeModal();
   renderAll();
@@ -506,7 +552,7 @@ function addCategory(){
   if(!id||!label) return showMsg("catMsg","شناسه و عنوان الزامی",false);
   if(DB.categories.some(c=>c.id===id)) return showMsg("catMsg","شناسه تکراری",false);
   if(groups.length===0) return showMsg("catMsg","حداقل یک گروه وارد کنید",false);
-  DB.categories.push({id, label, icon, color, groups});
+  DB.categories.push({id, label, icon, color, groups, owner: currentUser});
   ["newCatId","newCatLabel","newCatIcon","newCatColor","newCatGroups"].forEach(i=> document.getElementById(i).value="");
   renderAll();
   showMsg("catMsg","دسته اضافه شد - ذخیره در سرور را بزنید",true);
@@ -572,14 +618,25 @@ function backupAll(){ exportJSON(); }
 
 // ============ کاربران - جدید کامل ============
 async function loadUsers(){
+  // فقط ادمین اصلی و ادمین عادی - ویراستار حق ندارد
+  if(isEditor()){
+    document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به این تب دسترسی دارد</td></tr>`;
+    document.getElementById("userCount").textContent="—";
+    return;
+  }
   const tbody=document.getElementById("userTbody");
   const countEl=document.getElementById("userCount");
+  if(!token){ tbody.innerHTML=`<tr><td colspan="6" style="text-align:center; color:#991b1b">⛔ توکن ندارید - دوباره وارد شوید</td></tr>`; return; }
   tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;">در حال بارگیری...</td></tr>`;
   try{
     const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminListUsers", token:token})});
     const text=await r.text();
-    let d; try{ d=JSON.parse(text);} catch(e){ throw new Error("پاسخ سرور JSON نیست: "+text.slice(0,120)); }
-    if(!d.ok) throw new Error(d.error);
+    if(text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html") || text.includes("ppConfig")){
+      throw new Error("پاسخ HTML از گوگل (توکن منقضی یا deployment روی Anyone نیست). لطفاً دوباره وارد شوید (خروج و ورود). اگر با «بروزرسانی» این خطا می‌آید، اول یک بار خروج بزنید.");
+    }
+    let d; try{ d=JSON.parse(text);} catch(e){ throw new Error("پاسخ سرور JSON نیست: "+text.slice(0,200)); }
+    if(!d.ok) throw new Error(d.error||"خطای نامشخص از سرور");
+    if(!d.users || !Array.isArray(d.users)) throw new Error("ساختار کاربران نامعتبر - دوباره ذخیره کنید (length missing)");
     countEl.textContent = d.users.length;
     tbody.innerHTML="";
     if(d.users.length===0){
@@ -607,7 +664,9 @@ async function loadUsers(){
       tbody.appendChild(tr);
     });
   } catch(e){
-    tbody.innerHTML=`<tr><td colspan="6" class="alert-err">خطا: ${escapeHtml(e.message)}</td></tr>`;
+    console.error("loadUsers error", e);
+    tbody.innerHTML=`<tr><td colspan="6" class="alert-err" style="padding:12px;">خطا: ${escapeHtml(e.message)}<br><span class="small">راه‌حل: ۱) خروج و ورود دوباره ۲) مطمئن شوید Apps Script روی <b>Anyone</b> و <b>New version</b> دیپلوی شده ۳) فیلترشکن را خاموش کنید</span></td></tr>`;
+    document.getElementById("userCount").textContent="—";
   }
 }
 async function createUser(){
@@ -690,19 +749,33 @@ async function loadLogs(type){
       tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center; padding:20px;">هنوز لاگی ثبت نشده</td></tr>`;
       return;
     }
-    // پیدا کن ستون category کجاست تا فارسی کنی
     const catIdx = d.header.indexOf("category");
-    d.rows.slice().reverse().forEach(row=>{
+    const attemptIdx = d.header.indexOf("attemptId");
+    const startRow = d.startRow || 2;
+    // نمایش به همراه دکمه حذف تکی (فقط برای admin اصلی)
+    d.rows.slice().reverse().forEach((row, revIdx)=>{
+      const realRow = d.rows.length - revIdx + startRow -1; // شماره واقعی شیت
       const tr=document.createElement("tr");
-      tr.innerHTML=row.map((c, idx)=>{
+      let html = row.map((c, idx)=>{
         let val = String(c ?? "");
         if(idx===catIdx) val = faCategory(val);
-        // زمان را کوتاه کن
         if(idx===0 && val.includes("T")){ try{ const dt=new Date(val); val = dt.toLocaleString('fa-IR'); } catch(e){} }
         return `<td>${escapeHtml(val)}</td>`;
       }).join("");
+      if(isMainAdmin()){
+        const att = attemptIdx>=0 ? row[attemptIdx] : "";
+        html += `<td><button class="danger" style="padding:4px 8px; font-size:11px;" onclick="deleteSingleLog(${realRow}, '${escapeHtml(String(att||""))}', '${type}')">🗑️ حذف</button></td>`;
+      }
+      tr.innerHTML = html;
       tbody.appendChild(tr);
     });
+    // اگر هدر دکمه حذف اضافه شد، یک th هم اضافه کن
+    if(isMainAdmin() && thead.querySelector("th")){
+      const htr = thead.querySelector("tr");
+      if(htr && !htr.innerHTML.includes("حذف")){
+        htr.innerHTML += `<th>حذف تکی</th>`;
+      }
+    }
   } catch(e){
     info.textContent="";
     errEl.textContent="خطا: "+e.message;
@@ -711,7 +784,7 @@ async function loadLogs(type){
   }
 }
 async function clearLogs(){
-  if(!isAdmin()) return alert("⛔ فقط ادمین می‌تواند لاگ‌ها را حذف کند");
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی (admin) می‌تواند کل لاگ‌ها را حذف کند — حتی ادمین‌های دیگر هم نه");
   const t = prompt("کدام لاگ حذف شود؟ بنویس: exam یا study یا all", "exam");
   if(!t) return;
   if(!confirm(`حذف لاگ ${t} برای همیشه؟`)) return;
@@ -723,6 +796,72 @@ async function clearLogs(){
     loadLogs(t==="all" ? "exam" : t);
   } catch(e){ alert("خطا: "+e.message); }
 }
+async function reportIssue(uid){
+  if(!isEditor() && !isAdmin()) return alert("فقط ویراستار/ادمین");
+  const issue = prompt("ایراد این سوال چیست؟ (مثلاً گزینه اشتباه، تایپ غلط...)", "");
+  if(issue===null) return;
+  if(!issue.trim()) return alert("توضیح را وارد کنید");
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"reportIssue", token:token, uid:uid, issue:issue})});
+    const text=await r.text();
+    if(text.trim().startsWith("<")) throw new Error("خطای سرور - دوباره وارد شوید");
+    const d=JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    alert("✅ گزارش ثبت شد - مدیر آن را در تب «گزارش ایرادها» می‌بیند");
+  }catch(e){ alert("خطا: "+e.message); }
+}
+async function deleteSingleLog(row, attemptId, type){
+  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی (admin) می‌تواند لاگ تکی را حذف کند");
+  const ok = confirm(`حذف این ردیف لاگ؟\n${attemptId ? "attemptId: "+attemptId : "ردیف: "+row}\nدانش‌آموز می‌تواند دوباره آزمون دهد.`);
+  if(!ok) return;
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminDeleteSingleLog", token:token, logType:type, row:row, attemptId:attemptId})});
+    const text=await r.text();
+    const d=JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    alert("✅ حذف شد");
+    loadLogs(type);
+  }catch(e){ alert("خطا: "+e.message); }
+}
+let lastIssues={header:[], rows:[]}, lastAudit={header:[], rows:[]};
+async function loadIssues(){
+  switchTab("issues");
+  const info=document.getElementById("issueInfo"), err=document.getElementById("issueError"), thead=document.getElementById("issueHead"), tbody=document.getElementById("issueBody");
+  err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetIssues", token:token})});
+    const text=await r.text();
+    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML - توکن منقضی یا Anyone نیست");
+    const d=JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    lastIssues=d;
+    info.textContent=`کل: ${d.total} — نمایش ${d.rows.length}`;
+    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    tbody.innerHTML="";
+    if(d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center;">گزارشی نیست</td></tr>`; return; }
+    d.rows.slice().reverse().forEach(row=>{ const tr=document.createElement("tr"); tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join(""); tbody.appendChild(tr); });
+  }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
+}
+async function loadAudit(){
+  switchTab("audit");
+  const info=document.getElementById("auditInfo"), err=document.getElementById("auditError"), thead=document.getElementById("auditHead"), tbody=document.getElementById("auditBody");
+  err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
+  try{
+    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetAudit", token:token})});
+    const text=await r.text();
+    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML - توکن منقضی");
+    const d=JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    lastAudit=d;
+    info.textContent=`کل: ${d.total} — نمایش ${d.rows.length}`;
+    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    tbody.innerHTML="";
+    if(d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center;">رکوردی نیست</td></tr>`; return; }
+    d.rows.slice().reverse().forEach(row=>{ const tr=document.createElement("tr"); tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join(""); tbody.appendChild(tr); });
+  }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
+}
+function exportIssuesCSV(){ if(!lastIssues.rows.length) return alert("ابتدا بارگیری کنید"); const csv=[lastIssues.header.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\\n"); const b=new Blob(["\\uFEFF"+csv],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="issues.csv"; a.click(); }
+function exportAuditCSV(){ if(!lastAudit.rows.length) return alert("ابتدا بارگیری کنید"); const csv=[lastAudit.header.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\\n"); const b=new Blob(["\\uFEFF"+csv],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="audit.csv"; a.click(); }
 function exportLogsCSV(){
   if(!lastLogs.rows || !lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
   // هدر فارسی برای CSV
