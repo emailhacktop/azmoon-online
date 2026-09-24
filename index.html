@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>آزمون آنلاین - نسخه امن ۲.۰</title>
+<title>آزمون آنلاین - نسخه امن ۲.۶</title>
 <meta name="description" content="آزمون آنلاین با بانک پویا و تصحیح امن">
-<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" integrity="sha384-5l7g2c3O5p7a2b8g5a1b2c3d4e5f6g7h8i9j0k" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" crossorigin="anonymous"></script>
 <style>
   :root{
     --primary:#4e73df;
@@ -134,7 +134,7 @@
 
   <!-- باکس شروع -->
   <div class="box center" id="startBox">
-    <h2>📝 آزمون آنلاین <span style="font-size:12px; background:#eef2ff; color:#4e73df; padding:2px 8px; border-radius:99px;">نسخه امن ۲.۰</span></h2>
+    <h2>📝 آزمون آنلاین <span style="font-size:12px; background:#eef2ff; color:#4e73df; padding:2px 8px; border-radius:99px;">نسخه امن ۲.۶</span></h2>
     <p class="subtitle">بانک ۴۰۰ سوال در ۴ دسته - هر آزمون ۱۰ سوال تصادفی - زمان ۳ دقیقه</p>
 
     <div id="secureBadge" class="alert alert-info hidden" style="text-align:center"></div>
@@ -191,7 +191,7 @@
     </div>
   </div>
 
-  <footer>طراحی اولیه: AminSystem2000 — نسخه امن ۲.۰ بازمهندسی شده • <span id="year"></span></footer>
+  <footer>طراحی اولیه: AminSystem2000 — نسخه امن ۲.۶ بازمهندسی شده • <span id="year"></span></footer>
 </div>
 
 <script>
@@ -378,7 +378,11 @@ async function startExam(){
         headers: {"Content-Type":"text/plain;charset=utf-8"},
         body: JSON.stringify({action:"getExam", category: category})
       });
-      const data = await resp.json();
+      const text = await resp.text();
+      if(text.trim().startsWith("<") || text.includes("ppConfig") || text.includes("<!DOCTYPE")){
+        throw new Error("سرور در حال بیدار شدن است (پاسخ HTML). لطفاً ۵ ثانیه صبر کنید و دوباره «شروع آزمون» را بزنید. اگر تکرار شد، مطمئن شوید فیلترشکن خاموش است.");
+      }
+      let data; try{ data=JSON.parse(text); }catch(e){ throw new Error("پاسخ نامعتبر از سرور: "+text.slice(0,120)); }
       if(!data.ok) throw new Error(data.error||"خطا از سرور");
       qs = data.questions;
       attemptId = data.attemptId;
@@ -553,7 +557,11 @@ async function finish(){
           ip: await getClientIP(), userAgent: navigator.userAgent
         })
       });
-      const data = await resp.json();
+      const text2 = await resp.text();
+      if(text2.trim().startsWith("<") || text2.includes("ppConfig")){
+        throw new Error("پاسخ HTML از سرور (اتصال ناپایدار). نتیجه احتمالاً در Google Sheet ذخیره شده — دکمه «بازیابی نتیجه از سرور» را بزنید. attemptId: "+attemptId);
+      }
+      let data; try{ data=JSON.parse(text2); }catch(e){ throw new Error("پاسخ نامعتبر: "+text2.slice(0,150)); }
       if(!data.ok) throw new Error(data.error);
       score = data.score;
       resultEl.textContent = `${userName}\nنمره: ${data.score} از ${data.total}` + (data.overtime ? " (زمان اضافه)" : "");
@@ -565,7 +573,7 @@ async function finish(){
       });
       html+="</table>";
       reviewEl.innerHTML = html;
-      if(data.score===data.total) confetti({particleCount:220, spread:120, origin:{y:0.6}});
+      try{ if(typeof confetti==="function" && data.score===data.total) confetti({particleCount:220, spread:120, origin:{y:0.6}}); }catch(e){ console.warn("confetti failed",e); }
       // همچنین لاگ قدیمی برای سازگاری
     } catch(e){
       console.error(e);
@@ -596,7 +604,7 @@ async function finish(){
     });
     html+="</table>";
     reviewEl.innerHTML = html;
-    if(score===qs.length) confetti({particleCount:200, spread:120});
+    try{ if(typeof confetti==="function" && score===qs.length) confetti({particleCount:200, spread:120}); }catch(e){ console.warn("confetti offline failed",e); }
     // ارسال لاگ به سرور (حتی در حالت آفلاین، برای آمار)
     if(WEB_APP_URL){
       fetch(WEB_APP_URL, {
@@ -636,7 +644,9 @@ async function retrySubmit(){
       })
     });
     const text = await resp.text();
-    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML از سرور - اتصال را چک کنید");
+    if(text.trim().startsWith("<") || text.includes("ppConfig")){
+      throw new Error("سرور پاسخ HTML داد (معمولاً یعنی Apps Script خواب است یا اتصال ناپایدار — نگران نباشید، نتیجه در شیت ذخیره شده. ۵ ثانیه صبر کنید و دوباره «بازیابی» را بزنید)");
+    }
     const data = JSON.parse(text);
     if(!data.ok) throw new Error(data.error);
     // نمایش موفق
@@ -646,7 +656,7 @@ async function retrySubmit(){
     (data.review||[]).forEach(r=>{ html += `<tr class="${r.ok?'correct':'wrong'}"><td>${sanitizeText(r.q)}</td><td>${sanitizeText(r.user)}</td><td>${sanitizeText(r.correct)}</td></tr>`; });
     html+="</table>";
     reviewEl.innerHTML = html;
-    if(data.score===data.total) confetti({particleCount:220, spread:120, origin:{y:0.6}});
+    try{ if(typeof confetti==="function" && data.score===data.total) confetti({particleCount:220, spread:120, origin:{y:0.6}}); }catch(e){ console.warn("confetti failed",e); }
   }catch(e){
     resultEl.textContent = "باز هم خطا: "+e.message;
     reviewEl.innerHTML += `<div class="alert alert-err" style="margin-top:8px;">خطا: ${sanitizeText(e.message)}<br>اگر نتیجه در شیت ثبت شده، مدیر می‌تواند از تب لاگ آن را ببیند یا با attemptId بازیابی کند.</div>`;

@@ -49,8 +49,9 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۲.۴ — دسترسی دقیق، حسابرسی، گزارش ایراد، حذف تکی لاگ</p>
+  <p>نسخه ۲.۶ — رفع confetti و خطای HTML و کندی</p>
 </header>
+<div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
 <div class="container">
 
@@ -247,7 +248,7 @@
 
   </div>
 
-  <footer>پنل مدیریت امن ۲.۱ — فارسی‌سازی لاگ + مدیریت کاربران — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۲.۶ — رفع confetti و کندی — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -359,8 +360,15 @@ function showDashboard(){
   const backupSection = document.getElementById("backupSection");
   if(backupSection) backupSection.style.display = isEditor() ? "none" : "";
   verifyToken();
-  loadDB();
-  if(isAdmin()) loadUsers(); else {
+  // لود ترتیبی برای جلوگیری از Too many simultaneous invocations
+  loadDB().then(()=> {
+    if(isAdmin()){
+      setTimeout(()=> loadUsers(), 800);
+    }
+  });
+  if(!isAdmin()){
+    // برای ویراستار، users را نشان نده
+
     document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
     document.getElementById("userCount").textContent="—";
   }
@@ -679,17 +687,28 @@ function importJSON(e){
 }
 function backupAll(){ exportJSON(); }
 
+let _fetchCount=0;
 async function fetchAdmin(action, extra={}){
-  const ip = await getClientIP().catch(()=>"");
-  const body = JSON.stringify(Object.assign({action:action, token:token, ip:ip, userAgent:navigator.userAgent}, extra));
-  const r = await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:body});
-  const text = await r.text();
+  _fetchCount++;
+  if(_fetchCount>1) console.warn("fetchAdmin concurrent:", _fetchCount, action);
+  // نمایش لودینگ کوچک
+  const loadingEl = document.getElementById("globalLoading");
+  if(loadingEl) loadingEl.style.display="block";
+  try{
+    const ip = await getClientIP().catch(()=>"");
+    const body = JSON.stringify(Object.assign({action:action, token:token, ip:ip, userAgent:navigator.userAgent}, extra));
+    const r = await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:body});
+    const text = await r.text();
   if(text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html") || text.includes("ppConfig")){
     throw new Error("پاسخ HTML از سرور (توکن منقضی یا شبکه ناپایدار). لطفاً ۵ ثانیه صبر کنید و دوباره امتحان کنید. اگر تکرار شد، یک بار خروج و ورود کنید.");
   }
   let d; try{ d=JSON.parse(text); }catch(e){ throw new Error("پاسخ JSON نیست: "+text.slice(0,200)); }
   if(!d.ok) throw new Error(d.error||"خطای سرور");
   return d;
+  } finally {
+    _fetchCount--;
+    if(loadingEl) loadingEl.style.display="none";
+  }
 }
 // ============ کاربران - جدید کامل ============
 async function loadUsers(){
