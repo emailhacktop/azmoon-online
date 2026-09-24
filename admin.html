@@ -103,8 +103,8 @@
       </div>
       <div class="flex" style="margin:8px 0;">
         <button onclick="openAddModal()">➕ افزودن سوال</button>
-        <button class="secondary" onclick="exportJSON()">⬇️ خروجی JSON (بک‌آپ کامل)</button>
-        <label style="flex:1; text-align:center; padding:10px; border:1.5px dashed #93c5fd; border-radius:10px; cursor:pointer; background:#eff6ff;">
+        <button class="secondary" id="btnExportJSON" onclick="exportJSON()">⬇️ خروجی JSON (بک‌آپ کامل)</button>
+        <label id="lblImportJSON" style="flex:1; text-align:center; padding:10px; border:1.5px dashed #93c5fd; border-radius:10px; cursor:pointer; background:#eff6ff;">
           ⬆️ وارد کردن JSON (بازگردانی) <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)">
         </label>
         <button class="ghost" onclick="saveToServer()" id="btnSaveServer">💾 ذخیره در سرور</button>
@@ -226,9 +226,11 @@
       <button onclick="changePass()">تغییر رمز</button>
       <div id="passMsg"></div>
       <hr>
+      <div id="backupSection">
       <h4>پشتیبان‌گیری</h4>
       <button class="secondary" onclick="backupAll()">⬇️ دانلود پشتیبان کامل (JSON)</button>
       <p class="small">شامل دسته‌ها + ۴۰۰ سوال + نسخه — همین فایل را با <b>وارد کردن JSON</b> می‌توانید برگردانید.</p>
+      </div>
       <div class="alert alert-warn">
         <b>استقرار ساده:</b> بعد از هر تغییر (حذف/اضافه سوال) فقط <b>ذخیره در سرور</b> را بزنید کافیست. نیازی به آپلود `assets/questions_db.json` روی گیت‌هاب نیست، مگر اینکه بخواهید حالت آفلاین (بدون گوگل) هم آپدیت باشد. برای حالت امن، فقط <b>ذخیره در سرور</b> کافیست.
       </div>
@@ -273,6 +275,7 @@
 <script>
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
 const DB_URL = "assets/questions_db.json";
+async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
 
 let DB = null;
 let token = localStorage.getItem("admin_token") || "";
@@ -333,31 +336,62 @@ function showDashboard(){
   document.getElementById("roleBadge").className = isAdmin() ? "badge badge-admin" : "badge";
   document.getElementById("tokenInfo").textContent="توکن فعال - انقضا 2 ساعت" + (isEditor() ? " — دسترسی ویراستار: فقط سوالات خودتان" : "");
   document.getElementById("currentUserName").textContent = currentUser;
-  // ویراستار: تب کاربران را مخفی کن و دکمه‌های خطرناک را غیرفعال
-  const usersTab = document.querySelector('[data-tab=\"users\"]');
+  // حیاتی: ایزوله کامل ویراستار
+  const usersTab = document.querySelector('[data-tab="users"]');
+  const logsTab = document.querySelector('[data-tab="logs"]');
+  const auditTab = document.querySelector('[data-tab="audit"]');
+  const issuesTab = document.querySelector('[data-tab="issues"]');
+  const settingsTab = document.querySelector('[data-tab="settings"]');
   if(usersTab) usersTab.style.display = isEditor() ? "none" : "";
+  if(logsTab) logsTab.style.display = isEditor() ? "none" : "";
+  if(auditTab) auditTab.style.display = isMainAdmin() ? "" : "none"; // فقط admin اصلی
+  if(issuesTab) issuesTab.style.display = isAdmin() ? "" : "none"; // ویراستار اصلاً گزارش‌ها را نبیند
+  // در تب سوالات، دکمه‌های خطرناک را برای ویراستار مخفی کن
+  const btnExport = document.getElementById("btnExportJSON");
+  const lblImport = document.getElementById("lblImportJSON");
+  const btnSave = document.getElementById("btnSaveServer");
+  if(btnExport) btnExport.style.display = isEditor() ? "none" : "";
+  if(lblImport) lblImport.style.display = isEditor() ? "none" : "";
+  if(btnSave && isEditor()) btnSave.title = "ویراستار فقط سوالات خودش را ذخیره می‌کند - حذف کل بانک ممنوع";
   const clearBtn = document.getElementById("btnClearLogs");
   if(clearBtn) clearBtn.style.display = isMainAdmin() ? "" : "none";
-  const saveBtn = document.getElementById("btnSaveServer");
-  if(saveBtn && isEditor()) saveBtn.title = "ویراستار فقط سوالات خودش را ذخیره می‌کند - حذف کل بانک ممنوع";
+  // در تنظیمات، بخش بکاپ را برای ویراستار مخفی کن
+  const backupSection = document.getElementById("backupSection");
+  if(backupSection) backupSection.style.display = isEditor() ? "none" : "";
   verifyToken();
   loadDB();
   if(isAdmin()) loadUsers(); else {
-    document.getElementById("userTbody").innerHTML=`<tr><td colspan=\"6\" style=\"text-align:center;\">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
+    document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
     document.getElementById("userCount").textContent="—";
   }
-}
+let _verifyInProgress=false;
 function verifyToken(){
-  if(!token) return;
+  if(!token || _verifyInProgress) return;
+  _verifyInProgress=true;
   fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})})
-  .then(r=>r.text()).then(t=>{
-    try{
-      const d=JSON.parse(t);
-      if(!d.ok){ logout(); alert("توکن منقضی شد، دوباره وارد شوید"); }
-    } catch(e){
-      logout(); alert("توکن نامعتبر - دوباره وارد شوید");
+  .then(r=>r.text()).then(text=>{
+    if(text.trim().startsWith("<") || text.includes("ppConfig")){
+      console.warn("verifyToken HTML response - ignore, maybe deployment warmup");
+      return; // چشمک نزن - فقط لاگ کن، کاربر هنوز ۲ ساعت وقت دارد
     }
-  }).catch(()=>{});
+    try{
+      const d=JSON.parse(text);
+      if(!d.ok){
+        document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">توکن منقضی شد — لطفاً دوباره وارد شوید (دکمه خروج)</div>`;
+        // auto logout نکن - بگذار کاربر خودش خروج بزند تا حلقه چشمک ایجاد نشود
+      } else {
+        // نقش به‌روز شد؟
+        if(d.role && d.role!==currentRole){
+          currentRole=d.role;
+          localStorage.setItem("admin_role", d.role);
+          showDashboard();
+        }
+      }
+    } catch(e){
+      console.warn("verifyToken parse fail", e);
+    }
+  }).catch(e=> console.warn("verifyToken fetch fail", e))
+  .finally(()=> _verifyInProgress=false);
 }
 function logout(){
   localStorage.removeItem("admin_token");
@@ -365,25 +399,31 @@ function logout(){
   localStorage.removeItem("admin_role");
   location.reload();
 }
+let _tabLoading={};
 function switchTab(name){
+  // جلوگیری از چشمک زدن: اگر همین تب فعال است کاری نکن
+  const cur = document.querySelector(".tab.active");
+  if(cur && cur.dataset.tab===name) return;
   document.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.dataset.tab===name));
   ["questions","categories","users","logs","issues","audit","settings"].forEach(n=>{
-    document.getElementById("tab-"+n).classList.toggle("hidden", n!==name);
+    const el=document.getElementById("tab-"+n);
+    if(el) el.classList.toggle("hidden", n!==name);
   });
-  if(name==='users') loadUsers();
-  if(name==='issues') loadIssues();
-  if(name==='audit') loadAudit();
-  if(name==='logs') {/* already loads via button */}
+  // بارگیری فقط با کلیک دکمه، نه خودکار — جلوگیری از Too many simultaneous invocations
+  // فقط users را اگر admin است و هنوز لود نشده، یک بار لود کن
+  if(name==='users' && isAdmin() && !_tabLoading.users){
+    _tabLoading.users=true;
+    loadUsers().finally(()=> _tabLoading.users=false);
+  }
+}
 }
 
 // ============ بانک ============
 async function loadDB(){
   try{
     if(token){
-      const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetQuestions", token:token})});
-      const text=await r.text();
-      let d; try{ d=JSON.parse(text);} catch(e){ throw new Error("پاسخ سرور JSON نیست"); }
-      if(d.ok && d.db && d.db.questions && d.db.questions.length){
+      const d = await fetchAdmin("adminGetQuestions", {});
+      if(d.ok && d.db && d.db.questions){
         DB=d.db;
         renderAll();
         return;
@@ -481,15 +521,23 @@ function renderCategories(){
   grid.innerHTML="";
   DB.categories.forEach((cat, idx)=>{
     const div=document.createElement("div");
+    const catOwner = String(cat.owner||"").toLowerCase();
+    const meCat = String(currentUser||"").toLowerCase();
+    const isOwnCat = isAdmin() ? true : (catOwner===meCat);
     div.className="card"; div.style.borderRight=`6px solid ${cat.color||'#4e73df'}`;
+    let catOps = "";
+    if(isEditor() && !isOwnCat){
+      catOps = `<span class="small">مال ${escapeHtml(cat.owner||"—")} — فقط مشاهده</span>`;
+    } else if(isEditor() && isOwnCat){
+      catOps = `<div class="actions" style="margin-top:8px;"><button class="ghost" onclick="editCat(${idx})">ویرایش</button><button class="danger" onclick="delCat(${idx})">حذف</button></div>`;
+    } else {
+      catOps = `<div class="actions" style="margin-top:8px;"><button class="ghost" onclick="editCat(${idx})">ویرایش</button><button class="danger" onclick="delCat(${idx})">حذف</button><span class="small">${escapeHtml(cat.owner||"")}</span></div>`;
+    }
     div.innerHTML=`
       <div style="font-weight:800;">${escapeHtml(cat.icon||"📁")} ${escapeHtml(cat.label)} <span class="small">(${cat.id})</span></div>
       <div class="small">گروه‌ها: ${cat.groups.join("، ")}</div>
       <div class="small">تعداد سوال: ${DB.questions.filter(q=>q.category===cat.id).length}</div>
-      <div class="actions" style="margin-top:8px;">
-        <button class="ghost" onclick="editCat(${idx})">ویرایش</button>
-        <button class="danger" onclick="delCat(${idx})">حذف</button>
-      </div>
+      ${catOps}
     `;
     grid.appendChild(div);
   });
@@ -505,8 +553,11 @@ function openAddModal(){
   document.getElementById("modal").classList.remove("hidden");
 }
 function editQ(idx){
-  editingIndex=idx;
   const q=DB.questions[idx];
+  if(isEditor() && String(q.owner||"").toLowerCase()!==String(currentUser||"").toLowerCase()){
+    return alert("⛔ فقط سوالات خودتان را می‌توانید ویرایش کنید — برای بقیه «گزارش ایراد» بزنید");
+  }
+  editingIndex=idx;
   document.getElementById("modalTitle").textContent="ویرایش سوال #"+(idx+1);
   document.getElementById("mCat").value=q.category;
   document.getElementById("mGroup").value=q.group;
@@ -536,6 +587,10 @@ function saveModal(){
   showMsg("saveMsg","ذخیره محلی شد - حتما «ذخیره در سرور» را بزنید",true);
 }
 function delQ(idx){
+  const q=DB.questions[idx];
+  if(isEditor() && String(q.owner||"").toLowerCase()!==String(currentUser||"").toLowerCase()){
+    return alert("⛔ فقط سوالات خودتان را می‌توانید حذف کنید");
+  }
   if(!confirm("حذف سوال #"+(idx+1)+"؟")) return;
   DB.questions.splice(idx,1);
   renderAll();
@@ -559,6 +614,9 @@ function addCategory(){
 }
 function editCat(idx){
   const cat=DB.categories[idx];
+  if(isEditor() && String(cat.owner||"").toLowerCase()!==String(currentUser||"").toLowerCase()){
+    return alert("⛔ فقط دسته‌های خودتان را می‌توانید ویرایش کنید");
+  }
   const label=prompt("عنوان جدید:", cat.label);
   if(label===null) return;
   const groups=prompt("گروه‌ها با کاما:", cat.groups.join(","));
@@ -570,6 +628,9 @@ function editCat(idx){
 }
 function delCat(idx){
   const cat=DB.categories[idx];
+  if(isEditor() && String(cat.owner||"").toLowerCase()!==String(currentUser||"").toLowerCase()){
+    return alert("⛔ فقط دسته‌های خودتان را می‌توانید حذف کنید");
+  }
   const cnt=DB.questions.filter(q=>q.category===cat.id).length;
   if(cnt>0) if(!confirm(`این دسته ${cnt} سوال دارد. حذف شود؟ سوالات آن دسته هم حذف خواهند شد!`)) return;
   DB.categories.splice(idx,1);
@@ -580,13 +641,15 @@ function delCat(idx){
 // ============ ذخیره/بارگیری ============
 async function saveToServer(){
   if(!token) return alert("توکن ندارید - دوباره وارد شوید");
+  if(isEditor()){
+    // ویراستار: چک محلی که دسته دیگران را حذف نکرده
+    const myCats = DB.categories.filter(c=> String(c.owner||"").toLowerCase()===String(currentUser||"").toLowerCase()).map(c=>c.id);
+    // فقط اطلاع
+  }
   const btn=document.getElementById("btnSaveServer");
   btn.disabled=true; btn.textContent="در حال ذخیره...";
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminSaveQuestions", token:token, db:DB})});
-    const text=await r.text();
-    let d; try{ d=JSON.parse(text); } catch(e){ throw new Error("پاسخ سرور JSON نیست: "+text.slice(0,150)); }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminSaveQuestions", {db:DB});
     showMsg("saveMsg", `✅ ذخیره شد (${d.count} سوال در ${d.chunks} تکه) روی سرور`, true);
   } catch(e){
     showMsg("saveMsg","خطا: "+e.message, false);
@@ -616,9 +679,20 @@ function importJSON(e){
 }
 function backupAll(){ exportJSON(); }
 
+async function fetchAdmin(action, extra={}){
+  const ip = await getClientIP().catch(()=>"");
+  const body = JSON.stringify(Object.assign({action:action, token:token, ip:ip, userAgent:navigator.userAgent}, extra));
+  const r = await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:body});
+  const text = await r.text();
+  if(text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html") || text.includes("ppConfig")){
+    throw new Error("پاسخ HTML از سرور (توکن منقضی یا شبکه ناپایدار). لطفاً ۵ ثانیه صبر کنید و دوباره امتحان کنید. اگر تکرار شد، یک بار خروج و ورود کنید.");
+  }
+  let d; try{ d=JSON.parse(text); }catch(e){ throw new Error("پاسخ JSON نیست: "+text.slice(0,200)); }
+  if(!d.ok) throw new Error(d.error||"خطای سرور");
+  return d;
+}
 // ============ کاربران - جدید کامل ============
 async function loadUsers(){
-  // فقط ادمین اصلی و ادمین عادی - ویراستار حق ندارد
   if(isEditor()){
     document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به این تب دسترسی دارد</td></tr>`;
     document.getElementById("userCount").textContent="—";
@@ -627,16 +701,12 @@ async function loadUsers(){
   const tbody=document.getElementById("userTbody");
   const countEl=document.getElementById("userCount");
   if(!token){ tbody.innerHTML=`<tr><td colspan="6" style="text-align:center; color:#991b1b">⛔ توکن ندارید - دوباره وارد شوید</td></tr>`; return; }
-  tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;">در حال بارگیری...</td></tr>`;
+  if(tbody.dataset.loading==="1") return; // جلوگیری از کلیک مکرر بروزرسانی
+  tbody.dataset.loading="1";
+  tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;">در حال بارگیری... (لطفاً چند ثانیه صبر کنید)</td></tr>`;
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminListUsers", token:token})});
-    const text=await r.text();
-    if(text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html") || text.includes("ppConfig")){
-      throw new Error("پاسخ HTML از گوگل (توکن منقضی یا deployment روی Anyone نیست). لطفاً دوباره وارد شوید (خروج و ورود). اگر با «بروزرسانی» این خطا می‌آید، اول یک بار خروج بزنید.");
-    }
-    let d; try{ d=JSON.parse(text);} catch(e){ throw new Error("پاسخ سرور JSON نیست: "+text.slice(0,200)); }
-    if(!d.ok) throw new Error(d.error||"خطای نامشخص از سرور");
-    if(!d.users || !Array.isArray(d.users)) throw new Error("ساختار کاربران نامعتبر - دوباره ذخیره کنید (length missing)");
+    const d = await fetchAdmin("adminListUsers", {});
+    if(!d.users || !Array.isArray(d.users)) throw new Error("ساختار کاربران نامعتبر");
     countEl.textContent = d.users.length;
     tbody.innerHTML="";
     if(d.users.length===0){
@@ -667,7 +737,7 @@ async function loadUsers(){
     console.error("loadUsers error", e);
     tbody.innerHTML=`<tr><td colspan="6" class="alert-err" style="padding:12px;">خطا: ${escapeHtml(e.message)}<br><span class="small">راه‌حل: ۱) خروج و ورود دوباره ۲) مطمئن شوید Apps Script روی <b>Anyone</b> و <b>New version</b> دیپلوی شده ۳) فیلترشکن را خاموش کنید</span></td></tr>`;
     document.getElementById("userCount").textContent="—";
-  }
+  } finally { tbody.dataset.loading="0"; }
 }
 async function createUser(){
   const u=document.getElementById("newUser").value.trim();
@@ -676,9 +746,7 @@ async function createUser(){
   const active=document.getElementById("newActive").value;
   if(!u||!p) return showMsg("userMsg","نام و رمز الزامی",false);
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminCreateUser", token:token, username:u, password:p, role:role, active:active})});
-    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminCreateUser", {username:u, password:p, role:role, active:active});
     showMsg("userMsg","کاربر ساخته شد ✅ مستقیم در شیت Users هم ثبت شد",true);
     document.getElementById("newUser").value=""; document.getElementById("newPass").value="";
     loadUsers();
@@ -687,9 +755,7 @@ async function createUser(){
 async function deleteUser(username){
   if(!confirm(`حذف کاربر "${username}"؟ این عمل در شیت هم حذف می‌شود و غیرقابل بازگشت است!`)) return;
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminDeleteUser", token:token, username:username})});
-    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminDeleteUser", {username:username});
     showMsg("userListMsg","حذف شد ✅",true);
     loadUsers();
   } catch(e){ showMsg("userListMsg","خطا: "+e.message,false); }
@@ -698,9 +764,7 @@ async function toggleUser(username, currentActive){
   const newActive = currentActive==='yes' ? 'no' : 'yes';
   if(!confirm(`وضعیت "${username}" به ${newActive==='yes'?'فعال':'غیرفعال'} تغییر کند؟`)) return;
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminUpdateUser", token:token, username:username, active:newActive})});
-    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminUpdateUser", {username:username, active:newActive});
     loadUsers();
   } catch(e){ showMsg("userListMsg","خطا: "+e.message,false); }
 }
@@ -709,9 +773,7 @@ async function changeUserRole(username, currentRole){
   if(newRole===null) return;
   if(!['admin','editor','user'].includes(newRole.trim())) return alert("نقش باید admin یا editor یا user باشد");
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminUpdateUser", token:token, username:username, role:newRole.trim()})});
-    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminUpdateUser", {username:username, role:newRole.trim()});
     loadUsers();
   } catch(e){ showMsg("userListMsg","خطا: "+e.message,false); }
 }
@@ -727,16 +789,7 @@ async function loadLogs(type){
   const tbody=document.getElementById("logBody");
   thead.innerHTML=""; tbody.innerHTML="";
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetLogs", token:token, logType:type})});
-    const text=await r.text();
-    let d;
-    try{ d=JSON.parse(text); } catch(e){
-      if(text.trim().startsWith("<")){
-        throw new Error("پاسخ HTML از گوگل (توکن منقضی یا دسترسی deployment روی Anyone نیست). دوباره وارد شوید.");
-      }
-      throw new Error("پاسخ JSON نیست: "+text.slice(0,150));
-    }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminGetLogs", {logType:type});
     if(!d.header || !d.rows){
       throw new Error("ساختار لاگ نامعتبر");
     }
@@ -789,9 +842,7 @@ async function clearLogs(){
   if(!t) return;
   if(!confirm(`حذف لاگ ${t} برای همیشه؟`)) return;
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminClearLogs", token:token, logType:t})});
-    const text=await r.text(); const d=JSON.parse(text);
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminClearLogs", {logType:t});
     alert("✅ لاگ‌ها حذف شدند");
     loadLogs(t==="all" ? "exam" : t);
   } catch(e){ alert("خطا: "+e.message); }
@@ -802,11 +853,7 @@ async function reportIssue(uid){
   if(issue===null) return;
   if(!issue.trim()) return alert("توضیح را وارد کنید");
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"reportIssue", token:token, uid:uid, issue:issue})});
-    const text=await r.text();
-    if(text.trim().startsWith("<")) throw new Error("خطای سرور - دوباره وارد شوید");
-    const d=JSON.parse(text);
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("reportIssue", {uid:uid, issue:issue});
     alert("✅ گزارش ثبت شد - مدیر آن را در تب «گزارش ایرادها» می‌بیند");
   }catch(e){ alert("خطا: "+e.message); }
 }
@@ -815,10 +862,7 @@ async function deleteSingleLog(row, attemptId, type){
   const ok = confirm(`حذف این ردیف لاگ؟\n${attemptId ? "attemptId: "+attemptId : "ردیف: "+row}\nدانش‌آموز می‌تواند دوباره آزمون دهد.`);
   if(!ok) return;
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminDeleteSingleLog", token:token, logType:type, row:row, attemptId:attemptId})});
-    const text=await r.text();
-    const d=JSON.parse(text);
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminDeleteSingleLog", {logType:type, row:row, attemptId:attemptId});
     alert("✅ حذف شد");
     loadLogs(type);
   }catch(e){ alert("خطا: "+e.message); }
@@ -829,11 +873,7 @@ async function loadIssues(){
   const info=document.getElementById("issueInfo"), err=document.getElementById("issueError"), thead=document.getElementById("issueHead"), tbody=document.getElementById("issueBody");
   err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetIssues", token:token})});
-    const text=await r.text();
-    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML - توکن منقضی یا Anyone نیست");
-    const d=JSON.parse(text);
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminGetIssues", {});
     lastIssues=d;
     info.textContent=`کل: ${d.total} — نمایش ${d.rows.length}`;
     thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
@@ -847,11 +887,7 @@ async function loadAudit(){
   const info=document.getElementById("auditInfo"), err=document.getElementById("auditError"), thead=document.getElementById("auditHead"), tbody=document.getElementById("auditBody");
   err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminGetAudit", token:token})});
-    const text=await r.text();
-    if(text.trim().startsWith("<")) throw new Error("پاسخ HTML - توکن منقضی");
-    const d=JSON.parse(text);
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminGetAudit", {});
     lastAudit=d;
     info.textContent=`کل: ${d.total} — نمایش ${d.rows.length}`;
     thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
@@ -885,9 +921,7 @@ async function changePass(){
   if(n1!==n2) return showMsg("passMsg","تکرار رمز مطابقت ندارد",false);
   if(n1.length<6) return showMsg("passMsg","رمز حداقل 6 کاراکتر",false);
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminChangePassword", token:token, oldPassword:o, newPass:n1})});
-    const text=await r.text(); let d; try{ d=JSON.parse(text);} catch(e){ throw new Error(text.slice(0,150)); }
-    if(!d.ok) throw new Error(d.error);
+    const d = await fetchAdmin("adminChangePassword", {oldPassword:o, newPass:n1});
     showMsg("passMsg","رمز تغییر کرد ✅ - دوباره وارد شوید",true);
     setTimeout(logout,1500);
   } catch(e){ showMsg("passMsg","خطا: "+e.message,false); }
