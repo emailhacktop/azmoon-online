@@ -367,11 +367,10 @@ function showDashboard(){
     }
   });
   if(!isAdmin()){
-    // برای ویراستار، users را نشان نده
-
     document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
     document.getElementById("userCount").textContent="—";
   }
+}
 let _verifyInProgress=false;
 function verifyToken(){
   if(!token || _verifyInProgress) return;
@@ -385,8 +384,12 @@ function verifyToken(){
     try{
       const d=JSON.parse(text);
       if(!d.ok){
-        document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">توکن منقضی شد — لطفاً دوباره وارد شوید (دکمه خروج)</div>`;
-        // auto logout نکن - بگذار کاربر خودش خروج بزند تا حلقه چشمک ایجاد نشود
+        // توکن واقعاً منقضی شده - از داشبورد بیا بیرون
+        document.getElementById("dashboard").classList.add("hidden");
+        document.getElementById("loginCard").classList.remove("hidden");
+        document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">توکن منقضی شد — لطفاً دوباره وارد شوید</div>`;
+        localStorage.removeItem("admin_token");
+        token="";
       } else {
         // نقش به‌روز شد؟
         if(d.role && d.role!==currentRole){
@@ -423,7 +426,6 @@ function switchTab(name){
     _tabLoading.users=true;
     loadUsers().finally(()=> _tabLoading.users=false);
   }
-}
 }
 
 // ============ بانک ============
@@ -948,10 +950,60 @@ async function changePass(){
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-// auto login if token exists
-if(token){
-  showDashboard();
+// ورود خودکار فقط اگر توکن معتبر باشد - جلوگیری از قفل شدن روی admin
+async function tryAutoLogin(){
+  if(!token){
+    document.getElementById("loginCard").classList.remove("hidden");
+    document.getElementById("dashboard").classList.add("hidden");
+    return;
+  }
+  // یک بار توکن را چک کن، اگر نامعتبر بود لاگین را نشان بده
+  try{
+    const r = await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})});
+    const text = await r.text();
+    if(text.trim().startsWith("<") || text.includes("ppConfig")){
+      throw new Error("HTML");
+    }
+    const d = JSON.parse(text);
+    if(!d.ok) throw new Error(d.error);
+    // توکن معتبر است
+    currentRole = d.role || localStorage.getItem("admin_role") || "admin";
+    localStorage.setItem("admin_role", currentRole);
+    showDashboard();
+  } catch(e){
+    console.warn("autoLogin failed, show login", e);
+    // توکن خراب یا منقضی - پاک کن و فرم ورود را نشان بده
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_user");
+    localStorage.removeItem("admin_role");
+    token=""; currentUser="";
+    document.getElementById("loginCard").classList.remove("hidden");
+    document.getElementById("dashboard").classList.add("hidden");
+    document.getElementById("loginMsg").innerHTML = `<div class="alert alert-warn">نشست قبلی منقضی شد — لطفاً دوباره نام کاربری و رمز را وارد کنید</div>`;
+  }
 }
+// دکمه خروج اضطراری اگر قفل شد: با ?logout=1
+if(new URLSearchParams(location.search).get("logout")==="1"){
+  localStorage.clear();
+  location.href = location.pathname;
+}
+tryAutoLogin();
+// دکمه‌های اضطراری برای وقتی قفل به نظر می‌رسد
+setTimeout(()=>{
+  const card = document.getElementById("loginCard");
+  if(card && !card.classList.contains("hidden")){
+    // اگر فرم ورود دیده می‌شود، یک دکمه پاکسازی اضافه کن
+    if(!document.getElementById("btnForceLogout")){
+      const btn = document.createElement("button");
+      btn.id="btnForceLogout";
+      btn.className="ghost";
+      btn.style="margin-top:8px; font-size:11px;";
+      btn.textContent="♻️ پاکسازی حافظه (اگر بدون رمز وارد می‌شود)";
+      btn.onclick=()=>{ localStorage.clear(); location.reload(); };
+      card.appendChild(btn);
+    }
+  }
+}, 1500);
 </script>
 </body>
 </html>
