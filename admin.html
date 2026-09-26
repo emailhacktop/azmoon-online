@@ -54,7 +54,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۲ — بارگیری برای همه بدون polling + اصلاح بازنشانی</p>
+  <p>نسخه ۳.۳ — ترمیم بارگیری و بازنشانی + تست امنیتی</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -274,7 +274,7 @@
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۲ — بدون polling، بارگیری دستی — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۳ — ترمیم بارگیری/بازنشانی — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -473,33 +473,61 @@ function switchTab(name){
 }
 
 // ============ بانک ============
-async function loadDB(){
-  // اول از سرور (آرشیو کلی) بگیر — اگر خطا بود، نسخه محلی را نگه دار و به 400 برنگرد
-  try{
-    if(token){
-      const d = await fetchAdmin("adminGetQuestions", {});
-      if(d.ok && d.db && d.db.questions){
-        DB=d.db;
-        renderAll();
-        return;
+async function loadDB(retry=2){
+  // اول از سرور (آرشیو کلی مشترک) بگیر — با retry برای خطای لحظه‌ای
+  // نکته: اگر سرور 401 دارد ولی یک بار بارگیری 400 برگرداند، کاربر فکر می‌کند سوالش پاک شده — پس هرگز روی خطای موقت به 400 fallback نکن
+  if(token){
+    for(let attempt=0; attempt<=retry; attempt++){
+      try{
+        const d = await fetchAdmin("adminGetQuestions", {});
+        if(d.ok && d.db && d.db.questions){
+          DB=d.db;
+          renderAll();
+          return;
+        }
+        // اگر سرور ok ولی db خالی بود، یعنی واقعاً آرشیو خالی است — برو fallback
+        if(d.ok && d.db && d.db.questions && d.db.questions.length===0){
+          break; // برو سراغ fallback 400
+        }
+      } catch(e){
+        console.warn(`server load failed attempt ${attempt+1}/${retry+1}`,e.message);
+        // خطاهای موقت: HTML گرم شدن، Too many simultaneous، شبکه
+        const msg = String(e.message||"");
+        const isTransient = msg.includes("HTML") || msg.includes("Too many") || msg.includes("شبکه") || msg.includes("Failed to fetch") || msg.includes("پاسخ HTML");
+        if(isTransient && attempt < retry){
+          await new Promise(res=> setTimeout(res, 800 + attempt*700)); // 0.8s, 1.5s
+          continue;
+        }
+        // اگر DB از قبل داریم، همان را نگه دار و خطا نشان بده — به 400 برنگرد
+        if(DB && DB.questions && DB.questions.length){
+          showMsg("saveMsg", "⚠️ بارگیری از سرور ناموفق — نسخه فعلی نگه داشته شد: "+e.message+" (دوباره «بارگیری» بزنید)", false);
+          renderAll();
+          return;
+        }
+        // اگر DB نداریم و خطا موقت بود و retry تمام شد، یک بار دیگر تلاش کن به جای رفتن به 400
+        if(isTransient && attempt===retry){
+          showMsg("saveMsg", "⚠️ سرور موقتاً در دسترس نیست — لطفاً ۲ ثانیه بعد دوباره «🔄 بارگیری از سرور» را بزنید. (به 400 برنگشتیم تا اطلاعات‌تان گم نشود)", false);
+          return;
+        }
+        // خطای غیر موقت (توکن منقضی) — بگذار fallback تصمیم بگیرد
+        break;
       }
     }
-  } catch(e){
-    console.warn("server load failed",e);
-    if(DB && DB.questions && DB.questions.length){
-      showMsg("saveMsg", "⚠️ بارگیری از سرور ناموفق — نسخه محلی نگه داشته شد: "+e.message, false);
-      renderAll();
-      return;
-    }
-    // اگر DB هنوز خالی است، بعداً fallback می‌کنیم
   }
-  // فقط وقتی DB واقعاً خالی است از فایل محلی 400 سوالی بخوان
+  // فقط وقتی واقعاً آرشیو خالی است یا توکن نداریم، از فایل محلی 400 بخوان
   if(!DB || !DB.questions || DB.questions.length===0){
+    // اگر توکن داریم و سرور خالی برگردانده، یعنی اولین بار است — 400 را از فایل بخوان
+    // اگر توکن نداریم (حالت دانش‌آموز)، هم 400 را بخوان
     try{
       const r=await fetch(DB_URL,{cache:"no-store"});
+      if(!r.ok) throw new Error("fetch 400 failed "+r.status);
       DB=await r.json();
       renderAll();
+      if(token){
+        showMsg("saveMsg", "ℹ️ آرشیو سرور خالی بود — 400 سوال پیش‌فرض از فایل محلی بارگیری شد. برای ثبت در سرور «ذخیره در سرور» را بزنید.", true);
+      }
     } catch(e){
+      console.warn("fallback 400 failed",e);
       DB={meta:{version:"2.0"}, categories:[
         {id:"history_geo", label:"تاریخ و جغرافیا", icon:"🏛️", color:"#6f42c1", groups:["تاریخ","جغرافیا","ترکیبی"]},
         {id:"literature", label:"شعر و ادبیات", icon:"📚", color:"#d63384", groups:["شعر","ادبیات","ترکیبی"]},
@@ -507,6 +535,7 @@ async function loadDB(){
         {id:"math_iq", label:"هوش و ریاضی", icon:"🧮", color:"#0d6efd", groups:["ریاضی","هوش","ترکیبی"]},
       ], questions:[]};
       renderAll();
+      showMsg("saveMsg", "⚠️ نه سرور و نه فایل محلی در دسترس نیست — بانک خالی نمایش داده شد", false);
     }
   }
 }
@@ -526,38 +555,33 @@ async function loadFromServer(){
 // ===== بازنشانی کارخانه =====
 async function factoryReset(){
   const pass=document.getElementById("factoryPass").value;
-  const confirm=document.getElementById("factoryConfirm").value.trim();
+  const confirmTxt=document.getElementById("factoryConfirm").value.trim();
   const checked=document.getElementById("factoryCheck").checked;
   const msgEl=document.getElementById("factoryMsg");
   if(!pass) { msgEl.innerHTML='<div class="alert alert-err">رمز را وارد کنید</div>'; return; }
-  if(confirm!=="RESET"){ msgEl.innerHTML='<div class="alert alert-err">باید دقیقاً کلمه RESET را تایپ کنید</div>'; return; }
+  if(confirmTxt!=="RESET"){ msgEl.innerHTML='<div class="alert alert-err">باید دقیقاً کلمه RESET را تایپ کنید</div>'; return; }
   if(!checked){ msgEl.innerHTML='<div class="alert alert-err">تیک تایید را بزنید</div>'; return; }
   if(!confirm("⚠️ هشدار نهایی:\nهمه کاربران (جز admin)، همه لاگ‌ها، گزارش‌ها، حسابرسی، و همه سوالات/دسته‌های جدید برای همیشه پاک می‌شوند و فقط 400 سوال اولیه می‌ماند.\n\nآیا مطمئن هستید؟")) return;
   if(!confirm("تایید دوم: این عمل غیرقابل بازگشت است. ادامه دهیم؟")) return;
   const btn=document.querySelector(".btn-factory") || document.getElementById("btnFactoryReset");
+  if(!btn){ msgEl.innerHTML='<div class="alert alert-err">دکمه یافت نشد</div>'; return; }
   btn.disabled=true; btn.textContent="⏳ در حال بازنشانی...";
-  msgEl.innerHTML='<div class="alert alert-warn">⏳ لطفاً صبر کنید — در حال خواندن 400 سوال پیش‌فرض و پاکسازی سرور... (حدود 10 ثانیه)</div>';
+  msgEl.innerHTML='<div class="alert alert-warn">⏳ لطفاً صبر کنید — پاکسازی سرور و بازگشت به 400 سوال پیش‌فرض... (حدود 8 ثانیه)</div>';
   try{
-    // اول 400 پیش‌فرض را از فایل محلی بخوان
-    let defaultDB=null;
-    try{
-      const r=await fetch(DB_URL, {cache:"no-store"});
-      if(r.ok) defaultDB=await r.json();
-    }catch(e){ console.warn("fetch default failed",e); }
-    if(!defaultDB || !defaultDB.questions || defaultDB.questions.length===0){
-      msgEl.innerHTML='<div class="alert alert-err">❌ فایل 400 سوال یافت نشد (<code>assets/questions_db.json</code>).<br>۱) مطمئن شوید فایل روی گیت‌هاب هست و با همین مسیر در دسترس است.<br>۲) یا یک <b>پشتیبان JSON</b> که قبلاً دانلود کردید را از طریق «وارد کردن JSON» اول وارد کنید سپس بازنشانی بزنید.<br>۳) یا این صفحه را با <code>?v=3.2</code> رفرش کنید.</div>';
-      btn.disabled=false; btn.textContent="🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)";
-      return;
-    }
-    const d = await fetchAdmin("adminFactoryReset", {password: pass, confirm: "RESET", db: defaultDB});
+    // دیگر نیازی به خواندن فایل محلی نیست — سرور خودش 400 را در خود دارد (DEFAULT_DB_400)
+    // فقط رمز و تایید را می‌فرستیم تا ترافیک کم شود و دکمه همیشه کار کند حتی اگر فایل محلی در دسترس نباشد
+    const d = await fetchAdmin("adminFactoryReset", {password: pass, confirm: "RESET"});
     msgEl.innerHTML='<div class="alert alert-ok">✅ '+escapeHtml(d.message||"بازنشانی شد")+'<br>کل: '+d.count+' سوال، '+d.cats+' دسته — صفحه بعد از 2 ثانیه به‌روز می‌شود</div>';
     document.getElementById("factoryPass").value="";
     document.getElementById("factoryConfirm").value="";
     document.getElementById("factoryCheck").checked=false;
     setTimeout(async ()=>{ await loadDB(); renderAll(); }, 2000);
   }catch(e){
-    msgEl.innerHTML='<div class="alert alert-err">خطا: '+escapeHtml(e.message)+'</div>';
-  } finally { btn.disabled=false; btn.textContent="🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)"; }
+    console.error("factoryReset failed", e);
+    msgEl.innerHTML='<div class="alert alert-err">خطا: '+escapeHtml(e.message)+'<br><span class="small">اگر خطا «توکن» بود، یک بار خروج و ورود کنید. اگر «400 یافت نشد» بود، مطمئن شوید Code.gs نسخه ۳.۳ روی سرور دیپلوی شده (health باید 3.3 بدهد).</span></div>';
+  } finally { 
+    try{ btn.disabled=false; btn.textContent="🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)"; }catch(e){}
+  }
 }
 function renderAll(){
   renderQuestions();
@@ -1057,35 +1081,25 @@ async function loadAudit(){
   }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
 }
 
-async function clearIssues(){
-  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی (admin) می‌تواند گزارش‌ها را حذف کند");
-  if(!confirm("همه گزارش‌های ایراد حذف شوند؟ این عمل غیرقابل بازگشت است!")) return;
-  try{
-    const d = await fetchAdmin("adminClearIssues", {});
-    alert("✅ همه گزارش‌ها حذف شد");
-    loadIssues();
-  }catch(e){ alert("خطا: "+e.message); }
+function exportIssuesCSV(){ 
+  if(!lastIssues.rows || !lastIssues.rows.length) return alert("ابتدا بارگیری کنید");
+  const faH = lastIssues.header.map(h=> HEADER_FA[h]||h);
+  const csv=[faH.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n"));
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="reports_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
-async function clearAudit(){
-  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی می‌تواند حسابرسی را حذف کند");
-  if(!confirm("همه ردیف‌های حسابرسی حذف شوند؟")) return;
-  try{
-    const d = await fetchAdmin("adminClearAudit", {});
-    alert("✅ حسابرسی پاک شد");
-    loadAudit();
-  }catch(e){ alert("خطا: "+e.message); }
-}
-async function deleteSingleIssue(row){
-  if(!isMainAdmin()) return alert("⛔ فقط مدیر اصلی");
-  if(!confirm("این گزارش حذف شود؟")) return;
-  try{
-    const d = await fetchAdmin("adminDeleteSingleIssue", {row:row});
-    loadIssues();
-  }catch(e){ alert("خطا: "+e.message); }
+function exportAuditCSV(){ 
+  if(!lastAudit.rows || !lastAudit.rows.length) return alert("ابتدا بارگیری کنید");
+  const faH2 = lastAudit.header.map(h=> HEADER_FA[h]||h);
+  const csv=[faH2.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n"));
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="audit_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
-function exportIssuesCSV(){ if(!lastIssues.rows.length) return alert("ابتدا بارگیری کنید"); const csv=[lastIssues.header.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\\n"); const b=new Blob(["\\uFEFF"+csv],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="issues.csv"; a.click(); }
-function exportAuditCSV(){ if(!lastAudit.rows.length) return alert("ابتدا بارگیری کنید"); const csv=[lastAudit.header.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\\n"); const b=new Blob(["\\uFEFF"+csv],{type:"text/csv"}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download="audit.csv"; a.click(); }
 function exportLogsCSV(){
   if(!lastLogs.rows || !lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
   // هدر فارسی برای CSV
@@ -1143,28 +1157,6 @@ async function deleteSingleIssue(row){
     loadIssues();
   }catch(e){ alert("خطا: "+e.message); }
 }
-
-function exportIssuesCSV(){ 
-  if(!lastIssues.rows || !lastIssues.rows.length) return alert("ابتدا بارگیری کنید");
-  const faHeader = lastIssues.header.map(h=> HEADER_FA[h]||h);
-  const csv=[faHeader.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\n");
-  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download="reports_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-}
-
-
-function exportAuditCSV(){ 
-  if(!lastAudit.rows || !lastAudit.rows.length) return alert("ابتدا بارگیری کنید");
-  const faHeader = lastAudit.header.map(h=> HEADER_FA[h]||h);
-  const csv=[faHeader.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(","))).join("\n");
-  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download="audit_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
-}
-
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 // ورود خودکار فقط اگر توکن معتبر باشد - جلوگیری از قفل شدن روی admin
