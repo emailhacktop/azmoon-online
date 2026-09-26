@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۲.۷ — رفع CSV و ذخیره ویراستار</p>
+  <p>نسخه ۲.۸ — تثبیت آرشیو کلی ویراستار</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -248,7 +248,7 @@
 
   </div>
 
-  <footer>پنل مدیریت امن ۲.۷ — رفع CSV و ذخیره ویراستار — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۲.۸ — تثبیت آرشیو ویراستار — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -596,7 +596,21 @@ function saveModal(){
   if(a.length<2) return showMsg("modalMsg","حداقل 2 گزینه",false);
   if(!a.includes(c)) return showMsg("modalMsg","پاسخ صحیح باید یکی از گزینه‌ها باشد",false);
   const owner = editingIndex>=0 ? (DB.questions[editingIndex].owner || currentUser) : currentUser;
-  const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: editingIndex>=0? DB.questions[editingIndex].id : (DB.questions.length+1), category:cat, group:group, q:q, a:a, c:c, owner: owner};
+  // شماره سوال را در امتداد همان دسته بده (نه کل بانک) + جلوگیری از تداخل همزمان با timestamp
+  let newId;
+  if(editingIndex>=0){
+    newId = DB.questions[editingIndex].id;
+  } else {
+    const sameCat = DB.questions.filter(x=> x.category===cat);
+    const maxId = sameCat.length ? Math.max(...sameCat.map(x=> parseInt(x.id,10)||0)) : 0;
+    // اگر دسته جدید است از 1 شروع کن، وگرنه max+1 . برای اطمینان از یکتایی، اگر قبلاً چنین id بود، یکی اضافه کن
+    newId = maxId + 1;
+    // اگر به هر دلیل تکراری بود (همزمانی)، با زمان یکتا کن
+    if(sameCat.some(x=> String(x.id)===String(newId))){
+      newId = Date.now() % 100000; // fallback یکتا
+    }
+  }
+  const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: newId, category:cat, group:group, q:q, a:a, c:c, owner: owner};
   if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
   closeModal();
   renderAll();
@@ -666,7 +680,11 @@ async function saveToServer(){
   btn.disabled=true; btn.textContent="در حال ذخیره...";
   try{
     const d = await fetchAdmin("adminSaveQuestions", {db:DB});
-    showMsg("saveMsg", `✅ ذخیره شد (${d.count} سوال در ${d.chunks} تکه) روی سرور`, true);
+    const cnt = (d.count!==undefined ? d.count : DB.questions.length);
+    const ch = (d.chunks!==undefined ? d.chunks : "?");
+    showMsg("saveMsg", `✅ ذخیره شد (${cnt} سوال در ${ch} تکه) روی سرور — مالک: ${currentUser}`, true);
+    // بعد ذخیره، بانک را دوباره از سرور بگیر تا همه (حتی سوالات دیگران) را با شماره درست ببینی
+    setTimeout(()=> loadDB(), 600);
   } catch(e){
     showMsg("saveMsg","خطا: "+e.message, false);
   } finally{ btn.disabled=false; btn.textContent="💾 ذخیره در سرور"; }
