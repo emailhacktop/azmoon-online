@@ -49,7 +49,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۲.۸ — تثبیت آرشیو کلی ویراستار</p>
+  <p>نسخه ۲.۹ — شماره دسته‌ای و همگام‌سازی آنی</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -80,7 +80,7 @@
         </div>
         <div class="actions">
           <button class="ghost" onclick="logout()">خروج</button>
-          <button class="secondary" onclick="loadFromServer()">🔄 بارگیری از سرور</button>
+          <button class="secondary" id="btnLoadFromServer" onclick="loadFromServer()" title="آرشیو کلی را از سرور می‌خواند — اگر سوال جدیدی نمی‌بینید، این را بزنید">🔄 بارگیری از سرور</button>
         </div>
       </div>
     </div>
@@ -248,7 +248,7 @@
 
   </div>
 
-  <footer>پنل مدیریت امن ۲.۸ — تثبیت آرشیو ویراستار — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۲.۹ — شماره دسته‌ای و همگام‌سازی — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -365,6 +365,16 @@ function showDashboard(){
   // در تنظیمات، بخش بکاپ را برای ویراستار مخفی کن
   const backupSection = document.getElementById("backupSection");
   if(backupSection) backupSection.style.display = isEditor() ? "none" : "";
+  const btnLoad = document.getElementById("btnLoadFromServer");
+  // فقط admin اصلی ببیند — وگرنه ویراستار با زدن اشتباهی فکر می‌کند همه چیز پاک می‌شود
+  if(btnLoad){
+    if(isMainAdmin()){
+      btnLoad.style.display = "";
+      btnLoad.title = "بارگیری آرشیو کلی از سرور (400+ سوال‌های همه طراحان)";
+    } else {
+      btnLoad.style.display = "none";
+    }
+  }
   verifyToken();
   // لود ترتیبی برای جلوگیری از Too many simultaneous invocations
   loadDB().then(()=> {
@@ -436,6 +446,7 @@ function switchTab(name){
 
 // ============ بانک ============
 async function loadDB(){
+  // اول از سرور (آرشیو کلی) بگیر — اگر خطا بود، نسخه محلی را نگه دار و به 400 برنگرد
   try{
     if(token){
       const d = await fetchAdmin("adminGetQuestions", {});
@@ -445,25 +456,39 @@ async function loadDB(){
         return;
       }
     }
-  } catch(e){ console.warn("server load failed",e); }
-  try{
-    const r=await fetch(DB_URL,{cache:"no-store"});
-    DB=await r.json();
-    renderAll();
   } catch(e){
-    DB={meta:{version:"2.0"}, categories:[
-      {id:"history_geo", label:"تاریخ و جغرافیا", icon:"🏛️", color:"#6f42c1", groups:["تاریخ","جغرافیا","ترکیبی"]},
-      {id:"literature", label:"شعر و ادبیات", icon:"📚", color:"#d63384", groups:["شعر","ادبیات","ترکیبی"]},
-      {id:"art_music", label:"موسیقی و هنر", icon:"🎨", color:"#fd7e14", groups:["هنر","موسیقی","ترکیبی"]},
-      {id:"math_iq", label:"هوش و ریاضی", icon:"🧮", color:"#0d6efd", groups:["ریاضی","هوش","ترکیبی"]},
-    ], questions:[]};
-    renderAll();
+    console.warn("server load failed",e);
+    if(DB && DB.questions && DB.questions.length){
+      showMsg("saveMsg", "⚠️ بارگیری از سرور ناموفق — نسخه محلی نگه داشته شد: "+e.message, false);
+      renderAll();
+      return;
+    }
+    // اگر DB هنوز خالی است، بعداً fallback می‌کنیم
+  }
+  // فقط وقتی DB واقعاً خالی است از فایل محلی 400 سوالی بخوان
+  if(!DB || !DB.questions || DB.questions.length===0){
+    try{
+      const r=await fetch(DB_URL,{cache:"no-store"});
+      DB=await r.json();
+      renderAll();
+    } catch(e){
+      DB={meta:{version:"2.0"}, categories:[
+        {id:"history_geo", label:"تاریخ و جغرافیا", icon:"🏛️", color:"#6f42c1", groups:["تاریخ","جغرافیا","ترکیبی"]},
+        {id:"literature", label:"شعر و ادبیات", icon:"📚", color:"#d63384", groups:["شعر","ادبیات","ترکیبی"]},
+        {id:"art_music", label:"موسیقی و هنر", icon:"🎨", color:"#fd7e14", groups:["هنر","موسیقی","ترکیبی"]},
+        {id:"math_iq", label:"هوش و ریاضی", icon:"🧮", color:"#0d6efd", groups:["ریاضی","هوش","ترکیبی"]},
+      ], questions:[]};
+      renderAll();
+    }
   }
 }
 async function loadFromServer(){
+  if(!isMainAdmin()){
+    return showMsg("saveMsg","⛔ فقط مدیر اصلی می‌تواند آرشیو کلی را بارگیری کند — شما نسخه محلی را می‌بینید که بعد ذخیره خودکار به‌روز می‌شود", false);
+  }
   await loadDB();
-  await loadUsers();
-  showMsg("saveMsg","بارگیری شد",true);
+  if(isAdmin()) await loadUsers();
+  showMsg("saveMsg","✅ آرشیو کلی از سرور بارگیری شد ("+(DB?DB.questions.length:0)+" سوال)",true);
 }
 function renderAll(){
   renderQuestions();
@@ -517,7 +542,7 @@ function renderQuestions(){
       ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button><span class="small">${escapeHtml(item.owner||"")}</span></div>`;
     }
     tr.innerHTML=`
-      <td>${realIdx+1}</td>
+      <td>${escapeHtml(item.id)}<div class="small" style="font-size:10px; color:#9ca3af;">کل:${realIdx+1}</div></td>
       <td><span class="badge">${escapeHtml((DB.categories.find(c=>c.id===item.category)||{}).label||item.category)}</span></td>
       <td>${escapeHtml(item.group)}</td>
       <td style="max-width:280px; white-space:pre-wrap;">${escapeHtml(item.q)}</td>
