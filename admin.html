@@ -48,14 +48,13 @@
   .danger-zone h4{ color:#991b1b; margin:0 0 8px; }
   .danger-zone .btn-factory{ background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; border:none; padding:12px 18px; border-radius:10px; font-weight:800; font-size:14px; width:100%; cursor:pointer; box-shadow:0 4px 12px rgba(220,38,38,.3); }
   .danger-zone .btn-factory:hover{ background:linear-gradient(135deg,#b91c1c,#7f1d1d); }
-  #updateBanner{ position:sticky; top:0; z-index:50; background:linear-gradient(135deg,#0ea5e9,#4e73df); color:#fff; padding:10px 14px; border-radius:10px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; gap:10px; box-shadow:0 4px 12px rgba(0,0,0,.15); }
-  #updateBanner button{ background:#fff; color:#0ea5e9; border:none; padding:7px 14px; border-radius:99px; font-weight:700; cursor:pointer; }
+
 </style>
 </head>
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۱ — بارگیری برای همه + بازنشانی کارخانه</p>
+  <p>نسخه ۳.۲ — بارگیری برای همه بدون polling + اصلاح بازنشانی</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -77,10 +76,6 @@
 
   <!-- داشبورد -->
   <div id="dashboard" class="hidden">
-    <div id="updateBanner" class="hidden">
-      <span>🔄 <b>به‌روزرسانی جدید!</b> <span id="updateBannerText">سوالات جدید روی سرور موجود است</span></span>
-      <button onclick="applyUpdate()">📥 بارگیری کن</button>
-    </div>
 
     <div class="card">
       <div class="flex" style="justify-content:space-between;">
@@ -264,7 +259,7 @@
         <h4>☢️ منطقه خطر — بازنشانی کارخانه</h4>
         <p class="small" style="color:#7f1d1d; line-height:1.7;">
           این دکمه <b>همه چیز را پاک می‌کند و به حالت خام برمی‌گرداند</b> ولی <b>400 سوال پیش‌فرض را نگه می‌دارد</b>:<br>
-          • پاک می‌شود: تمام <b>کاربران جدید</b> (به جز admin اصلی)، تمام <b>لاگ آزمون و مطالعه</b>، تمام <b>گزارش ایرادها</b>، تمام <b>حسابرسی</b>، تمام <b>سوالات و دسته‌های جدید</b> که بعداً اضافه کردید، و شیت <b>Meta</b> (تاریخ‌ها)<br>
+          • پاک می‌شود: تمام <b>کاربران جدید</b> (به جز admin اصلی)، تمام <b>لاگ آزمون و مطالعه</b>، تمام <b>گزارش ایرادها</b>، تمام <b>حسابرسی</b>، تمام <b>سوالات و دسته‌های جدید</b> که بعداً اضافه کردید، و شیت <b>Meta</b> (فقط ۲-۳ ردیف نسخه/زمان — هم پاک و دوباره ساخته می‌شود)<br>
           • می‌ماند: فقط <b>admin</b> با همین رمز فعلی، و <b>400 سوال اصلی</b> (100 تا هر دسته) + 4 دسته اولیه<br>
           <b style="color:#dc2626;">این عمل غیرقابل بازگشت است!</b> قبلش حتما <b>⬇️ دانلود پشتیبان کامل</b> را بزنید.
         </p>
@@ -275,11 +270,11 @@
           <input id="factoryConfirm" placeholder="تایپ کنید: RESET">
           <label style="display:flex; gap:8px; align-items:center; margin:8px 0; font-size:13px;"><input type="checkbox" id="factoryCheck" style="width:auto;"> متوجه‌ام که همه اطلاعات جدید پاک می‌شود و فقط 400 سوال می‌ماند.</label>
         </div>
-        <button class="btn-factory" onclick="factoryReset()">🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)</button>
+        <button class="btn-factory" id="btnFactoryReset" onclick="factoryReset()">🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)</button>
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۱ — بارگیری برای همه و بازنشانی کارخانه — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۲ — بدون polling، بارگیری دستی — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -414,10 +409,6 @@ function showDashboard(){
     if(isAdmin()){
       setTimeout(()=> loadUsers(), 800);
     }
-    lastKnownCount = DB?DB.questions.length:0;
-    try{ lastKnownUpdated = ""; }catch(e){}
-    hideUpdateBanner();
-    startUpdatePolling();
   });
   if(!isAdmin()){
     document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
@@ -530,64 +521,8 @@ async function loadFromServer(){
   await loadDB();
   if(isAdmin()) await loadUsers();
   showMsg("saveMsg","✅ آرشیو کلی مشترک از سرور خوانده شد ("+(DB?DB.questions.length:0)+" سوال) — فقط خواندن، چیزی پاک نشد",true);
-  hideUpdateBanner();
-  lastKnownCount = DB?DB.questions.length:0;
   window._dirtyAfterEdit=false;
 }
-// ===== همگام‌سازی زنده برای کاربران آنلاین =====
-let lastKnownCount = null;
-let pollInterval = null;
-let lastKnownUpdated = "";
-function startUpdatePolling(){
-  if(pollInterval) clearInterval(pollInterval);
-  // هر 45 ثانیه چک کن — سبک (فقط meta) تا Too many simultaneous نخوریم
-  pollInterval = setInterval(checkForUpdates, 45000);
-  document.addEventListener("visibilitychange", ()=>{
-    if(!document.hidden && token){
-      // وقتی تب دوباره فعال شد، سریع چک کن
-      setTimeout(checkForUpdates, 1200);
-    }
-  });
-}
-async function checkForUpdates(){
-  if(!token || document.hidden) return;
-  try{
-    const d = await fetchAdmin("adminGetMeta", {});
-    if(d.count!==undefined){
-      if(lastKnownCount===null){
-        lastKnownCount = d.count;
-        lastKnownUpdated = d.updated||"";
-      } else if(d.count !== lastKnownCount || (d.updated && d.updated !== lastKnownUpdated)){
-        // تغییر یافته
-        const diff = d.count - lastKnownCount;
-        const txt = diff>0 ? `${diff} سوال جدید (کل: ${d.count})` : `تغییر در بانک (کل: ${d.count})`;
-        showUpdateBanner(txt);
-        // اگر کاربر در تب سوالات نیست، یک پیغام کوچک هم در saveMsg
-        if(document.getElementById("tab-questions")?.classList.contains("hidden")){
-          showMsg("saveMsg", `🔄 ${txt} — به تب سوالات بروید و «بارگیری» بزنید`, true);
-        }
-      }
-    }
-  } catch(e){
-    // سکوت — احتمالا rate limit موقت
-    console.warn("poll check failed", e.message);
-  }
-}
-function showUpdateBanner(text){
-  const b=document.getElementById("updateBanner");
-  const tx=document.getElementById("updateBannerText");
-  if(b && tx){ tx.textContent=text; b.classList.remove("hidden"); }
-}
-function hideUpdateBanner(){
-  const b=document.getElementById("updateBanner");
-  if(b) b.classList.add("hidden");
-}
-async function applyUpdate(){
-  hideUpdateBanner();
-  await loadFromServer();
-  showMsg("saveMsg","✅ به‌روزرسانی اعمال شد",true);
-}
-
 // ===== بازنشانی کارخانه =====
 async function factoryReset(){
   const pass=document.getElementById("factoryPass").value;
@@ -599,7 +534,7 @@ async function factoryReset(){
   if(!checked){ msgEl.innerHTML='<div class="alert alert-err">تیک تایید را بزنید</div>'; return; }
   if(!confirm("⚠️ هشدار نهایی:\nهمه کاربران (جز admin)، همه لاگ‌ها، گزارش‌ها، حسابرسی، و همه سوالات/دسته‌های جدید برای همیشه پاک می‌شوند و فقط 400 سوال اولیه می‌ماند.\n\nآیا مطمئن هستید؟")) return;
   if(!confirm("تایید دوم: این عمل غیرقابل بازگشت است. ادامه دهیم؟")) return;
-  const btn=document.querySelector(".btn-factory");
+  const btn=document.querySelector(".btn-factory") || document.getElementById("btnFactoryReset");
   btn.disabled=true; btn.textContent="⏳ در حال بازنشانی...";
   msgEl.innerHTML='<div class="alert alert-warn">⏳ لطفاً صبر کنید — در حال خواندن 400 سوال پیش‌فرض و پاکسازی سرور... (حدود 10 ثانیه)</div>';
   try{
@@ -609,21 +544,17 @@ async function factoryReset(){
       const r=await fetch(DB_URL, {cache:"no-store"});
       if(r.ok) defaultDB=await r.json();
     }catch(e){ console.warn("fetch default failed",e); }
-    if(!defaultDB || !defaultDB.questions){
-      // fallback: بانک خالی با 4 دسته
-      defaultDB={meta:{version:"2.0"}, categories:[
-        {id:"history_geo", label:"تاریخ و جغرافیا", icon:"🏛️", color:"#6f42c1", groups:["تاریخ","جغرافیا","ترکیبی"]},
-        {id:"literature", label:"شعر و ادبیات", icon:"📚", color:"#d63384", groups:["شعر","ادبیات","ترکیبی"]},
-        {id:"art_music", label:"موسیقی و هنر", icon:"🎨", color:"#fd7e14", groups:["هنر","موسیقی","ترکیبی"]},
-        {id:"math_iq", label:"هوش و ریاضی", icon:"🧮", color:"#0d6efd", groups:["ریاضی","هوش","ترکیبی"]}
-      ], questions:[]};
+    if(!defaultDB || !defaultDB.questions || defaultDB.questions.length===0){
+      msgEl.innerHTML='<div class="alert alert-err">❌ فایل 400 سوال یافت نشد (<code>assets/questions_db.json</code>).<br>۱) مطمئن شوید فایل روی گیت‌هاب هست و با همین مسیر در دسترس است.<br>۲) یا یک <b>پشتیبان JSON</b> که قبلاً دانلود کردید را از طریق «وارد کردن JSON» اول وارد کنید سپس بازنشانی بزنید.<br>۳) یا این صفحه را با <code>?v=3.2</code> رفرش کنید.</div>';
+      btn.disabled=false; btn.textContent="🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)";
+      return;
     }
     const d = await fetchAdmin("adminFactoryReset", {password: pass, confirm: "RESET", db: defaultDB});
     msgEl.innerHTML='<div class="alert alert-ok">✅ '+escapeHtml(d.message||"بازنشانی شد")+'<br>کل: '+d.count+' سوال، '+d.cats+' دسته — صفحه بعد از 2 ثانیه به‌روز می‌شود</div>';
     document.getElementById("factoryPass").value="";
     document.getElementById("factoryConfirm").value="";
     document.getElementById("factoryCheck").checked=false;
-    setTimeout(async ()=>{ await loadDB(); renderAll(); hideUpdateBanner(); lastKnownCount=DB?DB.questions.length:0; }, 2000);
+    setTimeout(async ()=>{ await loadDB(); renderAll(); }, 2000);
   }catch(e){
     msgEl.innerHTML='<div class="alert alert-err">خطا: '+escapeHtml(e.message)+'</div>';
   } finally { btn.disabled=false; btn.textContent="🗑️ بازنشانی کارخانه — حذف کل اطلاعات جدید (بازگشت به 400)"; }
