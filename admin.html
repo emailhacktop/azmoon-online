@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v3.5</title>
+<title>پنل مدیریت آزمون - v3.7</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -54,7 +54,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۵ — رفع ۳ باگ بحرانی + خروج خودکار کاربر حذف شده</p>
+  <p>نسخه ۳.۷ — رفع ۳ باگ بحرانی + خروج خودکار کاربر حذف شده</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -274,7 +274,7 @@
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۵ — ترمیم ذخیره/بازنشانی/نشست — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۷ — ترمیم امنیت نشست حذف‌شده — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -282,7 +282,7 @@
   <div class="card" style="max-width:640px; width:100%; max-height:90vh; overflow:auto;">
     <h3 id="modalTitle">ویرایش سوال</h3>
     <select id="mCat"></select>
-    <input id="mGroup" placeholder="گروه (مثلاً تاریخ)">
+    <select id="mGroup"></select>
     <textarea id="mQ" placeholder="متن سوال"></textarea>
     <div class="grid2">
       <input id="mA1" placeholder="گزینه 1">
@@ -411,21 +411,19 @@ function showDashboard(){
     }
   }
   verifyToken();
-  // بررسی دوره‌ای توکن هر 60 ثانیه — اگر کاربر حذف/غیرفعال شد، خودکار خارج شود
+  // بررسی دوره‌ای توکن هر 30 ثانیه — اگر کاربر حذف/غیرفعال شد، آنی خارج شود (30s برای جلوگیری از سوءاستفاده)
   if(window._verifyInterval) clearInterval(window._verifyInterval);
   window._verifyInterval = setInterval(()=> {
     if(token && !document.hidden) verifyToken();
-  }, 60000);
-  // لود ترتیبی برای جلوگیری از Too many simultaneous invocations
+  }, 30000);
+  // همچنین هنگام بازگشت به تب/فوکوس فوراً چک کن
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && token) verifyToken(); });
+  window.addEventListener("focus", ()=>{ if(token) verifyToken(); });
+  // لود ترتیبی: DB سپس کاربران (برای badge حذف شده) — حتی ویراستار هم برای badge نیاز دارد
   loadDB().then(()=> {
-    if(isAdmin()){
-      setTimeout(()=> loadUsers(), 800);
-    }
+    // همه نقش‌ها برای تشخیص (حذف شده) نیاز به لیست کاربران دارند — ولی تب کاربران فقط برای admin نمایش داده می‌شود
+    setTimeout(()=> loadUsers().catch(()=>{}), 700);
   });
-  if(!isAdmin()){
-    document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به لیست کاربران دسترسی دارد</td></tr>`;
-    document.getElementById("userCount").textContent="—";
-  }
 }
 let _verifyInProgress=false;
 function verifyToken(){
@@ -440,12 +438,16 @@ function verifyToken(){
     try{
       const d=JSON.parse(text);
       if(!d.ok){
-        // توکن واقعاً منقضی شده - از داشبورد بیا بیرون
+        // توکن واقعاً منقضی/ابطال شده (حذف/غیرفعال) - از داشبورد بیا بیرون
         document.getElementById("dashboard").classList.add("hidden");
         document.getElementById("loginCard").classList.remove("hidden");
-        document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">توکن منقضی شد — لطفاً دوباره وارد شوید</div>`;
+        const reason = d.error||"توکن نامعتبر";
+        document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">⛔ نشست باطل شد — ${escapeHtml(reason)} — لطفاً دوباره وارد شوید</div>`;
         localStorage.removeItem("admin_token");
-        token="";
+        localStorage.removeItem("admin_user");
+        localStorage.removeItem("admin_role");
+        token=""; currentUser="";
+        if(window._verifyInterval) clearInterval(window._verifyInterval);
       } else {
         // نقش به‌روز شد؟
         if(d.role && d.role!==currentRole){
@@ -628,6 +630,29 @@ function populateFilters(){
     const o=document.createElement("option"); o.value=g; o.textContent=g; gSel.appendChild(o);
   });
 }
+function updateGroupOptions(selectedGroup){
+  const catId = document.getElementById("mCat").value;
+  const cat = DB.categories.find(c=>c.id===catId);
+  const sel = document.getElementById("mGroup");
+  if(!sel) return;
+  sel.innerHTML="";
+  if(!cat || !cat.groups || !cat.groups.length){
+    const o=document.createElement("option"); o.value="عمومی"; o.textContent="عمومی"; sel.appendChild(o);
+    return;
+  }
+  cat.groups.forEach(g=>{
+    const o=document.createElement("option"); o.value=g; o.textContent=g; sel.appendChild(o);
+  });
+  if(selectedGroup && cat.groups.includes(selectedGroup)){
+    sel.value = selectedGroup;
+  }
+}
+// وقتی دسته عوض شد، گروه‌های مجاز را به‌روز کن
+document.addEventListener("DOMContentLoaded", ()=>{
+  const mc=document.getElementById("mCat");
+  if(mc) mc.addEventListener("change", ()=> updateGroupOptions());
+});
+
 function renderQuestions(){
   const tbody=document.getElementById("qTbody");
   if(!DB){ tbody.innerHTML="<tr><td colspan=7>در حال بارگیری...</td></tr>"; return; }
@@ -707,8 +732,9 @@ function openAddModal(){
   editingIndex=-1;
   document.getElementById("modalTitle").textContent="افزودن سوال جدید";
   document.getElementById("mQ").value="";
-  ["mA1","mA2","mA3","mA4","mGroup","mC"].forEach(id=> document.getElementById(id).value="");
+  ["mA1","mA2","mA3","mA4","mC"].forEach(id=> document.getElementById(id).value="");
   document.getElementById("mCat").value = DB.categories[0]?.id || "";
+  updateGroupOptions();
   document.getElementById("modal").classList.remove("hidden");
 }
 function editQ(idx){
@@ -719,7 +745,12 @@ function editQ(idx){
   editingIndex=idx;
   document.getElementById("modalTitle").textContent="ویرایش سوال #"+(idx+1);
   document.getElementById("mCat").value=q.category;
-  document.getElementById("mGroup").value=q.group;
+  updateGroupOptions(q.group);
+  // fallback اگر گروه قدیمی دیگر در لیست نیست (دسته عوض شده)
+  if(document.getElementById("mGroup").value!==q.group){
+    const sel=document.getElementById("mGroup");
+    const o=document.createElement("option"); o.value=q.group; o.textContent=q.group+" (قدیمی)"; sel.appendChild(o); sel.value=q.group;
+  }
   document.getElementById("mQ").value=q.q;
   document.getElementById("mA1").value=q.a[0]||"";
   document.getElementById("mA2").value=q.a[1]||"";
@@ -736,25 +767,29 @@ function saveModal(){
   const a=[document.getElementById("mA1").value.trim(), document.getElementById("mA2").value.trim(), document.getElementById("mA3").value.trim(), document.getElementById("mA4").value.trim()].filter(Boolean);
   const c=document.getElementById("mC").value.trim();
   if(!cat||!group||!q) return showMsg("modalMsg","دسته، گروه و متن سوال الزامی",false);
+  // اعتبارسنجی گروه مجاز برای دسته انتخابی
+  const catObj = DB.categories.find(cc=>cc.id===cat);
+  if(!catObj) return showMsg("modalMsg","دسته نامعتبر",false);
+  if(!catObj.groups || !catObj.groups.includes(group)){
+    return showMsg("modalMsg","گروه «"+escapeHtml(group)+"» برای دسته «"+escapeHtml(catObj.label)+"» مجاز نیست — فقط می‌توانید یکی از این‌ها را انتخاب کنید: "+(catObj.groups||[]).join("، "),false);
+  }
   if(a.length<2) return showMsg("modalMsg","حداقل 2 گزینه",false);
   if(!a.includes(c)) return showMsg("modalMsg","پاسخ صحیح باید یکی از گزینه‌ها باشد",false);
   const owner = editingIndex>=0 ? (DB.questions[editingIndex].owner || currentUser) : currentUser;
-  // شماره سوال را در امتداد همان دسته بده (نه کل بانک) + جلوگیری از تداخل همزمان با timestamp
+  // شماره سوال را مستقل per-group بده (هر گروه شماره خودش)
   let newId;
   if(editingIndex>=0){
     newId = DB.questions[editingIndex].id;
   } else {
-    const sameCat = DB.questions.filter(x=> x.category===cat);
-    const maxId = sameCat.length ? Math.max(...sameCat.map(x=> parseInt(x.id,10)||0)) : 0;
-    // اگر دسته جدید است از 1 شروع کن، وگرنه max+1
+    const sameGroup = DB.questions.filter(x=> x.category===cat && x.group===group);
+    const maxId = sameGroup.length ? Math.max(...sameGroup.map(x=> parseInt(x.id,10)||0)) : 0;
     newId = maxId + 1;
-    // اگر به هر دلیل تکراری بود (همزمانی دو نفر)، یکی‌یکی زیاد کن تا یکتا شود
     let tries=0;
-    while(sameCat.some(x=> String(x.id)===String(newId)) && tries<100){
+    while(sameGroup.some(x=> String(x.id)===String(newId)) && tries<100){
       newId++;
       tries++;
     }
-    if(tries>=100) newId = Date.now() % 100000; // آخرین fallback
+    if(tries>=100) newId = Date.now() % 100000;
   }
   const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: newId, category:cat, group:group, q:q, a:a, c:c, owner: owner};
   if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
@@ -886,7 +921,30 @@ async function fetchAdmin(action, extra={}){
     throw new Error("پاسخ HTML از سرور (توکن منقضی یا شبکه ناپایدار). لطفاً ۵ ثانیه صبر کنید و دوباره امتحان کنید. اگر تکرار شد، یک بار خروج و ورود کنید.");
   }
   let d; try{ d=JSON.parse(text); }catch(e){ throw new Error("پاسخ JSON نیست: "+text.slice(0,200)); }
-  if(!d.ok) throw new Error(d.error||"خطای سرور");
+  if(!d.ok){
+    const msg = String(d.error||"");
+    if(msg.includes("توکن نامعتبر") || msg.includes("منقضی") || msg.includes("حذف") || msg.includes("غیرفعال") || msg.includes("کاربر یافت نشد")){
+      // نشست باطل شده (حذف/غیرفعال) — فوراً خارج کن
+      try{
+        localStorage.removeItem("admin_token");
+        localStorage.removeItem("admin_user");
+        localStorage.removeItem("admin_role");
+      }catch(e){}
+      // اگر در داشبورد بود، به لاگین ببر
+      const dash=document.getElementById("dashboard");
+      const login=document.getElementById("loginCard");
+      if(dash && login && !dash.classList.contains("hidden")){
+        dash.classList.add("hidden");
+        login.classList.remove("hidden");
+        document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">⛔ نشست شما باطل شد — حساب شما حذف یا غیرفعال شده یا توکن منقضی شده. لطفاً دوباره وارد شوید.<br><span class="small">${escapeHtml(msg)}</span></div>`;
+        // توکن حافظه را هم پاک کن
+        token="";
+        currentUser="";
+        if(window._verifyInterval) clearInterval(window._verifyInterval);
+      }
+    }
+    throw new Error(d.error||"خطای سرور");
+  }
   return d;
   } finally {
     _fetchCount--;
@@ -895,7 +953,26 @@ async function fetchAdmin(action, extra={}){
 }
 // ============ کاربران - جدید کامل ============
 async function loadUsers(){
-  if(isEditor()){
+  const isEditorView = isEditor();
+  // تب کاربران فقط برای admin قابل دیدن است، اما برای badge همه باید لیست را بگیرند (ویراستار به صورت silent)
+  if(isEditorView){
+    // اگر ویراستار تب کاربران را باز کرده، پیام بده ولی همچنان برای badge تلاش کن silent
+    const tbodyCheck=document.getElementById("userTbody");
+    const countCheck=document.getElementById("userCount");
+    // اگر از تب users صدا زده نشده (silent badge load)، فقط set را پر کن و برگرد بدون رندر جدول
+    const isSilent = !document.getElementById("tab-users") || document.getElementById("tab-users").classList.contains("hidden");
+    if(isSilent){
+      try{
+        const dSilent = await fetchAdmin("adminListUsers", {});
+        if(dSilent.users && Array.isArray(dSilent.users)){
+          existingUsersSet = new Set(dSilent.users.map(u=> String(u.username||"").toLowerCase()));
+          // بعد silent، سوالات را دوباره رندر کن تا badge درست شود
+          renderQuestions(); renderCategories();
+        }
+      }catch(eSilent){ console.warn("silent loadUsers for badge failed", eSilent); }
+      return;
+    }
+    // اگر واقعاً تب users باز است، پیام عدم دسترسی نشان بده
     document.getElementById("userTbody").innerHTML=`<tr><td colspan="6" style="text-align:center;">⛔ فقط ادمین به این تب دسترسی دارد</td></tr>`;
     document.getElementById("userCount").textContent="—";
     return;
@@ -1113,11 +1190,26 @@ async function loadAudit(){
     const d = await fetchAdmin("adminGetAudit", {});
     if(!d.header || !Array.isArray(d.rows)) throw new Error("ساختار حسابرسی نامعتبر");
     lastAudit=d;
-    info.textContent=`کل: ${d.total||0} — نمایش ${(d.rows||[]).length}`;
-    thead.innerHTML="<tr>"+(d.header||[]).map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    info.textContent=`کل: ${d.total||0} — نمایش ${(d.rows||[]).length} — برای هر ردیف: عامل | عمل | جزئیات شامل سوال/دسته است`;
+    const detailIdx = (d.header||[]).indexOf("detail");
+    const targetIdx = (d.header||[]).indexOf("target");
+    thead.innerHTML="<tr>"+(d.header||[]).map(h=>`<th>${escapeHtml(HEADER_FA[h]||h)}</th>`).join("")+"</tr>";
     tbody.innerHTML="";
     if(!d.rows || d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${(d.header||[]).length}" style="text-align:center;">رکوردی نیست</td></tr>`; return; }
-    d.rows.slice().reverse().forEach(row=>{ const tr=document.createElement("tr"); tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join(""); tbody.appendChild(tr); });
+    d.rows.slice().reverse().forEach(row=>{
+      const tr=document.createElement("tr");
+      tr.innerHTML=row.map((c, idx)=>{
+        let val=String(c||"");
+        if(idx===detailIdx || idx===targetIdx){
+          // ترجمه دسته id به فارسی داخل detail
+          for(const [en,fa] of Object.entries(CATEGORY_FA)){
+            val = val.split(en).join(fa);
+          }
+        }
+        return `<td style="white-space:pre-wrap; max-width:320px;">${escapeHtml(val)}</td>`;
+      }).join("");
+      tbody.appendChild(tr);
+    });
   }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
 }
 
