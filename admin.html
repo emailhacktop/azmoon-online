@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v3.7</title>
+<title>پنل مدیریت آزمون - v3.8</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -54,7 +54,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۷ — رفع ۳ باگ بحرانی + خروج خودکار کاربر حذف شده</p>
+  <p>نسخه ۳.۸ — رفع ۳ باگ بحرانی + خروج خودکار کاربر حذف شده</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -274,7 +274,7 @@
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۷ — ترمیم امنیت نشست حذف‌شده — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۸ — ترمیم شماره‌گذاری و UID و CSV — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -776,22 +776,25 @@ function saveModal(){
   if(a.length<2) return showMsg("modalMsg","حداقل 2 گزینه",false);
   if(!a.includes(c)) return showMsg("modalMsg","پاسخ صحیح باید یکی از گزینه‌ها باشد",false);
   const owner = editingIndex>=0 ? (DB.questions[editingIndex].owner || currentUser) : currentUser;
-  // شماره سوال را مستقل per-group بده (هر گروه شماره خودش)
+  // شماره سوال per-category: هر دسته از 100 -> 101 مستقل، دسته جدید از 1
   let newId;
   if(editingIndex>=0){
     newId = DB.questions[editingIndex].id;
   } else {
-    const sameGroup = DB.questions.filter(x=> x.category===cat && x.group===group);
-    const maxId = sameGroup.length ? Math.max(...sameGroup.map(x=> parseInt(x.id,10)||0)) : 0;
+    const sameCat = DB.questions.filter(x=> x.category===cat);
+    const maxId = sameCat.length ? Math.max(...sameCat.map(x=> parseInt(x.id,10)||0)) : 0;
     newId = maxId + 1;
     let tries=0;
-    while(sameGroup.some(x=> String(x.id)===String(newId)) && tries<100){
+    while(sameCat.some(x=> String(x.id)===String(newId)) && tries<100){
       newId++;
       tries++;
     }
     if(tries>=100) newId = Date.now() % 100000;
   }
-  const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: newId, category:cat, group:group, q:q, a:a, c:c, owner: owner};
+  const groupEnMap = {"تاریخ":"HISTORY","جغرافیا":"GEOGRAPHY","شعر":"POETRY","ادبیات":"LITERATURE","هنر":"ART","موسیقی":"MUSIC","ریاضی":"MATH","هوش":"IQ","ترکیبی":"MIXED","عمومی":"GENERAL"};
+  const grpEn = groupEnMap[group] || group.replace(/\s+/g,"_").toUpperCase();
+  const newUid = editingIndex>=0 ? DB.questions[editingIndex].uid : `${cat}_${grpEn}_${newId}`;
+  const obj={uid: newUid, id: newId, category:cat, group:group, q:q, a:a, c:c, owner: owner};
   if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
   closeModal();
   renderAll();
@@ -1216,33 +1219,53 @@ async function loadAudit(){
 function exportIssuesCSV(){ 
   if(!lastIssues.rows || !lastIssues.rows.length) return alert("ابتدا بارگیری کنید");
   const faH = lastIssues.header.map(h=> HEADER_FA[h]||h);
-  const csv=[faH.join(",")].concat(lastIssues.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n"));
+  const headerLine = faH.map(h=>`"${String(h).replace(/"/g,'""')}"`).join(",");
+  const rowsLines = lastIssues.rows.map(r=>r.map((v,idx)=>{
+    let s=String(v||"");
+    if(lastIssues.header[idx]==="category"){
+      for(const [en,fa] of Object.entries(CATEGORY_FA)) s=s.split(en).join(fa);
+    }
+    s=s.replace(/\r?\n/g," | ");
+    return `"${s.replace(/"/g,'""')}"`;
+  }).join(",")).join("\n");
+  const csv = headerLine + "\n" + rowsLines;
   const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download="reports_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="گزارش_ایرادها_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 function exportAuditCSV(){ 
   if(!lastAudit.rows || !lastAudit.rows.length) return alert("ابتدا بارگیری کنید");
   const faH2 = lastAudit.header.map(h=> HEADER_FA[h]||h);
-  const csv=[faH2.join(",")].concat(lastAudit.rows.map(r=>r.map(v=>`"${String(v||"").replace(/"/g,'""')}"`).join(",")).join("\n"));
-  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement("a"); a.href=url; a.download="audit_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  const headerLine2 = faH2.map(h=>`"${String(h).replace(/"/g,'""')}"`).join(",");
+  const rowsLines2 = lastAudit.rows.map(r=>r.map((v,idx)=>{
+    let s=String(v||"");
+    if(lastAudit.header[idx]==="category"){
+      for(const [en,fa] of Object.entries(CATEGORY_FA)) s=s.split(en).join(fa);
+    }
+    s=s.replace(/\r?\n/g," | ");
+    return `"${s.replace(/"/g,'""')}"`;
+  }).join(",")).join("\n");
+  const csv2 = headerLine2 + "\n" + rowsLines2;
+  const blob=new Blob(["\uFEFF"+csv2],{type:"text/csv;charset=utf-8;"});
+const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="حسابرسی_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
 }
 
 function exportLogsCSV(){
   if(!lastLogs.rows || !lastLogs.rows.length) return alert("ابتدا لاگ را بارگیری کنید");
-  // هدر فارسی برای CSV
   const faHeaders = lastLogs.header.map(h=> faHeader(h));
-  const csv=[faHeaders.join(",")].concat(lastLogs.rows.map(r=> r.map((c,idx)=>{
+  const headerLine = faHeaders.map(h=>`"${String(h).replace(/"/g,'""')}"`).join(",");
+  const rowsLines = lastLogs.rows.map(r=> r.map((c,idx)=>{
     let v=String(c ?? "");
     if(idx===lastLogs.header.indexOf("category")) v=faCategory(v);
+    v=v.replace(/\r?\n/g," | ");
     return `"${v.replace(/"/g,'""')}"`;
-  }).join(","))).join("\n");
+  }).join(",")).join("\n");
+  const csv = headerLine + "\n" + rowsLines;
   const blob=new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
-  const url=URL.createObjectURL(blob);
+const url=URL.createObjectURL(blob);
   const a=document.createElement("a"); a.href=url; a.download=`logs_${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
 
