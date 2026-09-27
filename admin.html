@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v3.0</title>
+<title>پنل مدیریت آزمون - v3.4</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -54,7 +54,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۳ — ترمیم بارگیری و بازنشانی + تست امنیتی</p>
+  <p>نسخه ۳.۴ — رفع ۴ باگ گزارشی + نمایش مالک حذف شده</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -274,7 +274,7 @@
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۳ — ترمیم بارگیری/بازنشانی — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۴ — رفع گزارش‌ها/بازنشانی/مالک — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -300,7 +300,14 @@
 </div>
 
 <script>
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
+const WEB_APP_URL = (() => {
+  // اگر روی لپ‌تاپ با offline_server.py اجرا می‌کنی، خودکار به سرور محلی وصل می‌شود
+  // اگر با file:// یا بدون سرور باز کنی، حالت آفلاینِ امن (بدون سرور) فعال می‌شود
+  const h = location.hostname;
+  if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
+  if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
+  return "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
+})();
 const DB_URL = "assets/questions_db.json";
 async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
 
@@ -561,6 +568,15 @@ async function factoryReset(){
   if(!pass) { msgEl.innerHTML='<div class="alert alert-err">رمز را وارد کنید</div>'; return; }
   if(confirmTxt!=="RESET"){ msgEl.innerHTML='<div class="alert alert-err">باید دقیقاً کلمه RESET را تایپ کنید</div>'; return; }
   if(!checked){ msgEl.innerHTML='<div class="alert alert-err">تیک تایید را بزنید</div>'; return; }
+  // بررسی رمز در مرحله اول — قبل از تاییدهای نهایی
+  msgEl.innerHTML='<div class="alert alert-warn">⏳ بررسی رمز مدیر اصلی...</div>';
+  try{
+    await fetchAdmin("adminCheckPassword", {password: pass});
+    msgEl.innerHTML='<div class="alert alert-ok">✅ رمز صحیح — حالا تایید نهایی</div>';
+  } catch(e){
+    msgEl.innerHTML='<div class="alert alert-err">❌ رمز مدیر اصلی نادرست — بازنشانی لغو شد<br><span class="small">'+escapeHtml(e.message)+'</span></div>';
+    return;
+  }
   if(!confirm("⚠️ هشدار نهایی:\nهمه کاربران (جز admin)، همه لاگ‌ها، گزارش‌ها، حسابرسی، و همه سوالات/دسته‌های جدید برای همیشه پاک می‌شوند و فقط 400 سوال اولیه می‌ماند.\n\nآیا مطمئن هستید؟")) return;
   if(!confirm("تایید دوم: این عمل غیرقابل بازگشت است. ادامه دهیم؟")) return;
   const btn=document.querySelector(".btn-factory") || document.getElementById("btnFactoryReset");
@@ -623,16 +639,17 @@ function renderQuestions(){
     const tr=document.createElement("tr"); tr.className="qrow";
     const owner = String(item.owner||"").toLowerCase();
     const me = String(currentUser||"").toLowerCase();
-    const isOwn = isAdmin() ? true : (owner===me); // ادمین همه را می‌تواند ادیت کند، ویراستار فقط مال خودش (حتی قدیمی بدون owner هم ویراستار نمی‌تواند)
-    // برای ویراستار، سوال دیگران فقط گزارش ایراد
+    const isOwn = isAdmin() ? true : (owner===me);
+    const ownerExists = existingUsersSet.has(owner) || owner==="admin" || owner==="";
+    const ownerDisplay = ownerExists ? escapeHtml(item.owner||"") : `<span style="color:#991b1b" title="کاربر حذف شده">${escapeHtml(item.owner||"—")} (حذف شده)</span>`;
     let ops = "";
     if(isEditor() && !isOwn){
-      ops = `<div class="actions"><button class="ghost" onclick="reportIssue('${item.uid}')">⚠️ گزارش ایراد</button><span class="small" style="align-self:center;">مال ${escapeHtml(item.owner||"—")}</span></div>`;
+      ops = `<div class="actions"><button class="ghost" onclick="reportIssue('${item.uid}')">⚠️ گزارش ایراد</button><span class="small" style="align-self:center;">مال ${ownerDisplay}</span></div>`;
     } else if(isEditor() && isOwn){
       ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button></div>`;
     } else {
-      // admin
-      ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button><span class="small">${escapeHtml(item.owner||"")}</span></div>`;
+      // admin - برای سوالات کاربر حذف شده، دکمه حذف/ویرایش فعال است ولی مالک مشخص است
+      ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button><span class="small">${ownerDisplay}</span></div>`;
     }
     tr.innerHTML=`
       <td>${escapeHtml(item.id)}<div class="small" style="font-size:10px; color:#9ca3af;">کل:${realIdx+1}</div></td>
@@ -658,14 +675,16 @@ function renderCategories(){
     const catOwner = String(cat.owner||"").toLowerCase();
     const meCat = String(currentUser||"").toLowerCase();
     const isOwnCat = isAdmin() ? true : (catOwner===meCat);
+    const catOwnerExists = existingUsersSet.has(catOwner) || catOwner==="admin" || catOwner==="";
     div.className="card"; div.style.borderRight=`6px solid ${cat.color||'#4e73df'}`;
+    const catOwnerDisplay = catOwnerExists ? escapeHtml(cat.owner||"") : `<span style="color:#991b1b">${escapeHtml(cat.owner||"—")} (حذف شده)</span>`;
     let catOps = "";
     if(isEditor() && !isOwnCat){
-      catOps = `<span class="small">مال ${escapeHtml(cat.owner||"—")} — فقط مشاهده</span>`;
+      catOps = `<span class="small">مال ${catOwnerDisplay} — فقط مشاهده</span>`;
     } else if(isEditor() && isOwnCat){
       catOps = `<div class="actions" style="margin-top:8px;"><button class="ghost" onclick="editCat(${idx})">ویرایش</button><button class="danger" onclick="delCat(${idx})">حذف</button></div>`;
     } else {
-      catOps = `<div class="actions" style="margin-top:8px;"><button class="ghost" onclick="editCat(${idx})">ویرایش</button><button class="danger" onclick="delCat(${idx})">حذف</button><span class="small">${escapeHtml(cat.owner||"")}</span></div>`;
+      catOps = `<div class="actions" style="margin-top:8px;"><button class="ghost" onclick="editCat(${idx})">ویرایش</button><button class="danger" onclick="delCat(${idx})">حذف</button><span class="small">${catOwnerDisplay}</span></div>`;
     }
     div.innerHTML=`
       <div style="font-weight:800;">${escapeHtml(cat.icon||"📁")} ${escapeHtml(cat.label)} <span class="small">(${cat.id})</span></div>
@@ -874,6 +893,7 @@ async function loadUsers(){
     const d = await fetchAdmin("adminListUsers", {});
     if(!d.users || !Array.isArray(d.users)) throw new Error("ساختار کاربران نامعتبر");
     countEl.textContent = d.users.length;
+    existingUsersSet = new Set(d.users.map(u=> String(u.username||"").toLowerCase()));
     tbody.innerHTML="";
     if(d.users.length===0){
       tbody.innerHTML=`<tr><td colspan="6" style="text-align:center;">کاربری نیست</td></tr>`;
@@ -956,8 +976,8 @@ async function loadLogs(type){
   thead.innerHTML=""; tbody.innerHTML="";
   try{
     const d = await fetchAdmin("adminGetLogs", {logType:type});
-    if(!d.header || !d.rows){
-      throw new Error("ساختار لاگ نامعتبر");
+    if(!d.header || !Array.isArray(d.rows)){
+      throw new Error("ساختار لاگ نامعتبر از سرور");
     }
     lastLogs=d;
     info.textContent=`نوع: ${type==='exam'?'آزمون':'مطالعه'} — کل: ${d.total} — نمایش ${d.rows.length} ردیف آخر`;
@@ -1034,17 +1054,19 @@ async function deleteSingleLog(row, attemptId, type){
   }catch(e){ alert("خطا: "+e.message); }
 }
 let lastIssues={header:[], rows:[]}, lastAudit={header:[], rows:[]};
+let existingUsersSet = new Set(["admin"]); // برای نمایش (حذف شده)
 async function loadIssues(){
   switchTab("issues");
   const info=document.getElementById("issueInfo"), err=document.getElementById("issueError"), thead=document.getElementById("issueHead"), tbody=document.getElementById("issueBody");
   err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
   try{
     const d = await fetchAdmin("adminGetIssues", {});
+    if(!d.header || !Array.isArray(d.rows)) throw new Error("ساختار گزارش نامعتبر از سرور");
     lastIssues=d;
-    info.textContent=`کل: ${d.total} — نمایش ${d.rows.length}`;
-    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    info.textContent=`کل: ${d.total||0} — نمایش ${(d.rows||[]).length}`;
+    thead.innerHTML="<tr>"+(d.header||[]).map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
     tbody.innerHTML="";
-    if(d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center;">گزارشی نیست</td></tr>`; return; }
+    if(!d.rows || d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${(d.header||[]).length}" style="text-align:center;">گزارشی نیست</td></tr>`; return; }
     const startRow = 2;
     d.rows.slice().reverse().forEach((row, revIdx)=>{
       const realRow = d.rows.length - revIdx + 1; // تقریبی، برای حذف از پایین
@@ -1072,11 +1094,12 @@ async function loadAudit(){
   err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
   try{
     const d = await fetchAdmin("adminGetAudit", {});
+    if(!d.header || !Array.isArray(d.rows)) throw new Error("ساختار حسابرسی نامعتبر");
     lastAudit=d;
-    info.textContent=`کل: ${d.total} — نمایش ${d.rows.length}`;
-    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
+    info.textContent=`کل: ${d.total||0} — نمایش ${(d.rows||[]).length}`;
+    thead.innerHTML="<tr>"+(d.header||[]).map(h=>`<th>${escapeHtml(h)}</th>`).join("")+"</tr>";
     tbody.innerHTML="";
-    if(d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${d.header.length}" style="text-align:center;">رکوردی نیست</td></tr>`; return; }
+    if(!d.rows || d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${(d.header||[]).length}" style="text-align:center;">رکوردی نیست</td></tr>`; return; }
     d.rows.slice().reverse().forEach(row=>{ const tr=document.createElement("tr"); tr.innerHTML=row.map(c=>`<td>${escapeHtml(String(c||""))}</td>`).join(""); tbody.appendChild(tr); });
   }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
 }
