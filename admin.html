@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v3.4</title>
+<title>پنل مدیریت آزمون - v3.5</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -54,7 +54,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۴ — رفع ۴ باگ گزارشی + نمایش مالک حذف شده</p>
+  <p>نسخه ۳.۵ — رفع ۳ باگ بحرانی + خروج خودکار کاربر حذف شده</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -274,7 +274,7 @@
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۴ — رفع گزارش‌ها/بازنشانی/مالک — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۵ — ترمیم ذخیره/بازنشانی/نشست — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -411,6 +411,11 @@ function showDashboard(){
     }
   }
   verifyToken();
+  // بررسی دوره‌ای توکن هر 60 ثانیه — اگر کاربر حذف/غیرفعال شد، خودکار خارج شود
+  if(window._verifyInterval) clearInterval(window._verifyInterval);
+  window._verifyInterval = setInterval(()=> {
+    if(token && !document.hidden) verifyToken();
+  }, 60000);
   // لود ترتیبی برای جلوگیری از Too many simultaneous invocations
   loadDB().then(()=> {
     if(isAdmin()){
@@ -481,6 +486,7 @@ function switchTab(name){
 
 // ============ بانک ============
 async function loadDB(retry=2){
+  if(window._saving){ console.log("loadDB skipped - saving in progress"); return; }
   // اول از سرور (آرشیو کلی مشترک) بگیر — با retry برای خطای لحظه‌ای
   // نکته: اگر سرور 401 دارد ولی یک بار بارگیری 400 برگرداند، کاربر فکر می‌کند سوالش پاک شده — پس هرگز روی خطای موقت به 400 fallback نکن
   if(token){
@@ -740,12 +746,15 @@ function saveModal(){
   } else {
     const sameCat = DB.questions.filter(x=> x.category===cat);
     const maxId = sameCat.length ? Math.max(...sameCat.map(x=> parseInt(x.id,10)||0)) : 0;
-    // اگر دسته جدید است از 1 شروع کن، وگرنه max+1 . برای اطمینان از یکتایی، اگر قبلاً چنین id بود، یکی اضافه کن
+    // اگر دسته جدید است از 1 شروع کن، وگرنه max+1
     newId = maxId + 1;
-    // اگر به هر دلیل تکراری بود (همزمانی)، با زمان یکتا کن
-    if(sameCat.some(x=> String(x.id)===String(newId))){
-      newId = Date.now() % 100000; // fallback یکتا
+    // اگر به هر دلیل تکراری بود (همزمانی دو نفر)، یکی‌یکی زیاد کن تا یکتا شود
+    let tries=0;
+    while(sameCat.some(x=> String(x.id)===String(newId)) && tries<100){
+      newId++;
+      tries++;
     }
+    if(tries>=100) newId = Date.now() % 100000; // آخرین fallback
   }
   const obj={uid: editingIndex>=0 ? DB.questions[editingIndex].uid : "uid_"+Date.now()+"_"+Math.random().toString(36).slice(2,6), id: newId, category:cat, group:group, q:q, a:a, c:c, owner: owner};
   if(editingIndex>=0) DB.questions[editingIndex]=obj; else DB.questions.push(obj);
@@ -819,15 +828,23 @@ async function saveToServer(){
   const btn=document.getElementById("btnSaveServer");
   btn.disabled=true; btn.textContent="در حال ذخیره...";
   try{
+    window._saving = true;
     const d = await fetchAdmin("adminSaveQuestions", {db:DB});
     const cnt = (d.count!==undefined ? d.count : DB.questions.length);
     const ch = (d.chunks!==undefined ? d.chunks : "?");
-    showMsg("saveMsg", `✅ ذخیره شد (${cnt} سوال در ${ch} تکه) روی سرور — مالک: ${currentUser}`, true);
-    // بعد ذخیره، بانک را دوباره از سرور بگیر تا همه (حتی سوالات دیگران) را با شماره درست ببینی
-    setTimeout(()=> loadDB(), 600);
+    if(cnt < DB.questions.length){
+      showMsg("saveMsg", `⚠️ سرور ${cnt} برگرداند ولی مرورگر ${DB.questions.length} دارد — تفاوت ${DB.questions.length - cnt} سوال. لطفاً یک بار «🔄 بارگیری از سرور» بزنید و دوباره بررسی کنید. اگر سوال جدیدتان نیست، دوباره اضافه و ذخیره کنید.`, false);
+    } else if(cnt > DB.questions.length){
+      showMsg("saveMsg", `✅ ذخیره شد (${cnt} سوال در ${ch} تکه) روی سرور — مالک: ${currentUser} (سرور ${cnt - DB.questions.length} سوال بیشتر دارد، احتمالاً همکار دیگری همزمان ذخیره کرده)`, true);
+      // به‌روز کن تا سوال همکار را هم ببینی
+      setTimeout(()=> { window._saving=false; loadDB(); }, 800);
+    } else {
+      showMsg("saveMsg", `✅ ذخیره شد (${cnt} سوال در ${ch} تکه) روی سرور — مالک: ${currentUser}`, true);
+    }
+    window._dirtyAfterEdit = false;
   } catch(e){
     showMsg("saveMsg","خطا: "+e.message, false);
-  } finally{ btn.disabled=false; btn.textContent="💾 ذخیره در سرور"; }
+  } finally{ btn.disabled=false; btn.textContent="💾 ذخیره در سرور"; window._saving=false; }
 }
 function exportJSON(){
   const blob=new Blob([JSON.stringify(DB, null, 2)], {type:"application/json"});
