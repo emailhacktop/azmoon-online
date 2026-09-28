@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v3.9</title>
+<title>پنل مدیریت آزمون - v4.0</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -48,6 +48,19 @@
   .danger-zone h4{ color:#991b1b; margin:0 0 8px; }
   .danger-zone .btn-factory{ background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; border:none; padding:12px 18px; border-radius:10px; font-weight:800; font-size:14px; width:100%; cursor:pointer; box-shadow:0 4px 12px rgba(220,38,38,.3); }
   .danger-zone .btn-factory:hover{ background:linear-gradient(135deg,#b91c1c,#7f1d1d); }
+  /* v4.0: designer + exam result */
+  .stat-card{ background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin:6px 0; }
+  .exam-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; padding:12px; z-index:100; }
+  .exam-modal .box{ background:#fff; border-radius:12px; max-width:900px; width:100%; max-height:90vh; overflow:auto; padding:18px; }
+  .exam-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .exam-table th{ background:#f3f4f6; padding:10px 8px; border:1px solid #e5e7eb; }
+  .exam-table td{ padding:8px; border:1px solid #e5e7eb; vertical-align:top; }
+  .exam-table tr.ok{ background:#ecfdf5; }
+  .exam-table tr.bad{ background:#fef2f2; }
+  .device-badge{ padding:2px 6px; border-radius:99px; font-size:11px; }
+  .device-mobile{ background:#dbeafe; color:#1e40af; }
+  .device-desktop{ background:#e0e7ff; color:#3730a3; }
+
 
 .blink{ animation: blink 1s infinite; }
 @keyframes blink{0%{opacity:1} 50%{opacity:.45} 100%{opacity:1}}
@@ -57,7 +70,7 @@
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۹ — گزارش‌های من + قفل فعال + حسابرسی دقیق حذف/افزودن + ذخیره خودکار</p>
+  <p>نسخه ۴.۰ — گزارش‌های من + قفل فعال + حسابرسی دقیق حذف/افزودن + ذخیره خودکار</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -97,6 +110,8 @@
       <div class="tab active" data-tab="questions" onclick="switchTab('questions')">📝 سوالات (<span id="qCount">0</span>)</div>
       <div class="tab" data-tab="categories" onclick="switchTab('categories')">📁 دسته‌بندی‌ها</div>
       <div class="tab" data-tab="myissues" onclick="switchTab('myissues')" id="tabBtnMyIssues" style="display:none;">📤 گزارش‌های من</div>
+      <div class="tab" data-tab="designers" onclick="switchTab('designers')" id="tabBtnDesigners">👨‍🏫 طراحان</div>
+      <div class="tab" data-tab="examResults" onclick="switchTab('examResults')" id="tabBtnExamResults">🎓 نتایج آزمون‌ها</div>
       <div class="tab" data-tab="users" onclick="switchTab('users')">👥 کاربران</div>
       <div class="tab" data-tab="logs" onclick="switchTab('logs')">📊 لاگ‌ها</div>
       <div class="tab" data-tab="issues" onclick="switchTab('issues')">⚠️ گزارش ایرادها</div>
@@ -235,10 +250,34 @@
       <div class="table-wrap"><table><thead id="auditHead"></thead><tbody id="auditBody"></tbody></table></div>
       <p class="small">ستون detail توضیح کامل را دارد. failCount و lockUntil را پایین ببینید.</p>
       <div class="alert alert-ok small" style="margin-top:10px;">
-        <b>failCount و lockUntil فعال شد (v3.9):</b><br>
+        <b>failCount و lockUntil فعال شد (v4.0):</b><br>
         `failCount` = تعداد تلاش ناموفق (هر ورود اشتباه +1، ورود موفق → 0). در <b>Cache و شیت Users ستون G</b> همزمان نوشته می‌شود.<br>
         `lockUntil` = زمان پایان قفل ۱۵ دقیقه‌ای پس از ۵ تلاش ناموفق — در <b>Cache و شیت Users ستون H (ISO)</b> ثبت می‌شود و در <b>تب حسابرسی</b> با عمل <code>accountLocked</code> یا <code>failedLogin</code> لاگ می‌شود. برای باز کردن دستی، مقدار H را پاک کنید و Cache را صبر کنید یا کاربر را یک بار فعال/غیرفعال کنید.
       </div>
+    </div>
+
+    <!-- تب طراحان — آمار سوالات هر کاربر -->
+    <div id="tab-designers" class="card hidden">
+      <h3>👨‍🏫 آمار طراحان — سوالات هر کاربر</h3>
+      <p class="small">admin همه را می‌بیند، ویراستار فقط خود را. هر سوال با <b>دسته/گروه#شناسه</b> نمایش داده می‌شود.</p>
+      <div class="flex"><button onclick="loadDesigners()">🔄 بروزرسانی آمار</button><button class="ghost" onclick="exportDesignersCSV()">⬇️ خروجی CSV</button></div>
+      <div id="designerInfo" class="small"></div>
+      <div class="table-wrap"><table><thead id="designerHead"></thead><tbody id="designerBody"></tbody></table></div>
+      <div id="designerDetails" style="margin-top:12px;"></div>
+    </div>
+
+    <!-- تب نتایج آزمون‌ها — نمایش دقیق کارنامه -->
+    <div id="tab-examResults" class="card hidden">
+      <h3>🎓 نتایج آزمون‌ها — نمایش دقیق مثل کارنامه دانش‌آموز</h3>
+      <p class="small">همان جدولی که دانش‌آموز بعد از آزمون می‌بیند (سوال | پاسخ شما | پاسخ صحیح) — برای بررسی اعتراض نمره. از لاگ آزمون می‌خواند.</p>
+      <div class="flex">
+        <input id="searchExamStudent" placeholder="جستجو نام یا شماره دانش‌آموزی..." oninput="filterExamResults()">
+        <select id="filterExamCat" onchange="filterExamResults()"><option value="">همه دسته‌ها</option></select>
+        <button onclick="loadExamResults()">🔄 بارگیری نتایج</button>
+      </div>
+      <div id="examResultInfo" class="small"></div>
+      <div id="examResultError" class="alert alert-err hidden"></div>
+      <div class="table-wrap"><table><thead id="examResultHead"></thead><tbody id="examResultBody"></tbody></table></div>
     </div>
 
     <!-- تب تنظیمات -->
@@ -399,7 +438,11 @@ function showDashboard(){
   if(auditTab) auditTab.style.display = isMainAdmin() ? "" : "none"; // فقط admin اصلی
   if(issuesTab) issuesTab.style.display = isAdmin() ? "" : "none"; // ویراستار اصلاً گزارش‌ها را نبیند
   const myIssuesTab = document.querySelector('[data-tab="myissues"]');
+  const designersTab = document.querySelector('[data-tab="designers"]');
+  const examResultsTab = document.querySelector('[data-tab="examResults"]');
   if(myIssuesTab) myIssuesTab.style.display = isEditor() ? "" : "none";
+  if(designersTab) designersTab.style.display = "";// همه می‌بینند، داخلش فیلتر می‌شود
+  if(examResultsTab) examResultsTab.style.display = isAdmin() ? "" : "none"; // فقط admin نتایج را ببیند
   // در تب سوالات، دکمه‌های خطرناک را برای ویراستار مخفی کن
   const btnExport = document.getElementById("btnExportJSON");
   const lblImport = document.getElementById("lblImportJSON");
@@ -495,7 +538,7 @@ function switchTab(name){
   const cur = document.querySelector(".tab.active");
   if(cur && cur.dataset.tab===name) return;
   document.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.dataset.tab===name));
-  ["questions","categories","myissues","users","logs","issues","audit","settings"].forEach(n=>{
+  ["questions","categories","myissues","designers","examResults","users","logs","issues","audit","settings"].forEach(n=>{
     const el=document.getElementById("tab-"+n);
     if(el) el.classList.toggle("hidden", n!==name);
   });
@@ -507,6 +550,12 @@ function switchTab(name){
   }
   if(name==='myissues' && isEditor()){
     loadMyIssues();
+  }
+  if(name==='designers'){
+    loadDesigners();
+  }
+  if(name==='examResults'){
+    loadExamResults();
   }
   if(name==='issues' && isAdmin()){
     // برای ادمین، گزارش‌ها را خودکار بارگیری نکن — دکمه دارد
@@ -1324,11 +1373,18 @@ async function loadAudit(){
       tr.innerHTML=row.map((c, idx)=>{
         let val=String(c||"");
         if(idx===detailIdx || idx===targetIdx){
-          // ترجمه دسته id به فارسی داخل detail
           for(const [en,fa] of Object.entries(CATEGORY_FA)){
             val = val.split(en).join(fa);
           }
         }
+        // نمایش دستگاه برای ستون ip/userAgent
+        if(d.header[idx]==="ip" && !val) val="نامشخص";
+        if(d.header[idx]==="userAgent" && val){
+          const dev = /Mobile|Android|iPhone|iPad/i.test(val) ? "📱 موبایل" : "💻 کامپیوتر";
+          val = dev + " — " + val.substring(0,60);
+        }
+        // اگر ip خالی بود و لاگین ناموفق، ستون ip را نامشخص بگذار
+        if(d.header[idx]==="ip" && String(c||"").trim()==="") val="—";
         return `<td style="white-space:pre-wrap; max-width:320px;">${escapeHtml(val)}</td>`;
       }).join("");
       tbody.appendChild(tr);
@@ -1432,6 +1488,183 @@ async function deleteSingleIssue(row){
     loadIssues();
   }catch(e){ alert("خطا: "+e.message); }
 }
+function detectDevice(ua){
+  ua = String(ua||"");
+  if(/Mobile|Android|iPhone|iPad/i.test(ua)) return '<span class="device-badge device-mobile">📱 موبایل</span>';
+  if(ua) return '<span class="device-badge device-desktop">💻 کامپیوتر</span>';
+  return '<span class="small">نامشخص</span>';
+}
+let lastDesignersData = [];
+function loadDesigners(){
+  switchTab('designers');
+  const info=document.getElementById("designerInfo"), thead=document.getElementById("designerHead"), tbody=document.getElementById("designerBody"), details=document.getElementById("designerDetails");
+  if(!info) return;
+  info.textContent="در حال محاسبه از بانک...";
+  thead.innerHTML=""; tbody.innerHTML=""; details.innerHTML="";
+  if(!DB || !DB.questions){ info.textContent="بانک خالی — ابتدا بارگیری کنید"; return; }
+  // گروه‌بندی بر اساس owner
+  const byOwner = {};
+  DB.questions.forEach(q=>{
+    const ow = String(q.owner||"—").trim() || "—";
+    if(!byOwner[ow]) byOwner[ow]=[];
+    byOwner[ow].push(q);
+  });
+  const isEd = isEditor();
+  const meL = String(currentUser||"").toLowerCase();
+  let owners = Object.keys(byOwner).sort();
+  if(isEd){
+    owners = owners.filter(o=> String(o).toLowerCase()===meL);
+    if(owners.length===0){ info.textContent="شما هنوز سوالی طراحی نکرده‌اید"; return; }
+  }
+  lastDesignersData = [];
+  thead.innerHTML="<tr><th>طراح</th><th>کل</th><th>تفکیک دسته</th><th>شماره‌ها</th><th>جزئیات</th></tr>";
+  owners.forEach(owner=>{
+    const qs = byOwner[owner];
+    const total = qs.length;
+    // تفکیک per category
+    const catMap = {};
+    qs.forEach(q=>{
+      const cat = q.category;
+      if(!catMap[cat]) catMap[cat]=[];
+      catMap[cat].push(q);
+    });
+    const catSummary = Object.entries(catMap).map(([cat, arr])=>{
+      const label = (DB.categories.find(c=>c.id===cat)||{}).label||cat;
+      const groups = {};
+      arr.forEach(q=>{ const g=q.group; if(!groups[g]) groups[g]=[]; groups[g].push(q.id); });
+      const groupStr = Object.entries(groups).map(([g, ids])=> `${g}: ${ids.sort((a,b)=>a-b).join("، ")}`).join(" | ");
+      return `${label} (${arr.length}) — ${groupStr}`;
+    }).join("<br>");
+    const idsShort = qs.slice(0,8).map(q=> `${q.category}/${q.group}#${q.id}`).join("، ") + (qs.length>8 ? ` ... +${qs.length-8}` : "");
+    lastDesignersData.push({owner,total,catMap,qs});
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><b>${escapeHtml(owner)}</b> ${String(owner).toLowerCase()===meL?'<span class="small">(شما)</span>':''}</td><td style="text-align:center; font-weight:700;">${total}</td><td style="font-size:11px; max-width:320px; white-space:pre-wrap;">${catSummary}</td><td style="font-size:11px; max-width:220px;">${escapeHtml(idsShort)}</td><td><button class="ghost" style="padding:4px 8px; font-size:11px;" onclick="showDesignerDetails('${escapeHtml(owner)}')">👁 جزئیات</button></td>`;
+    tbody.appendChild(tr);
+  });
+  info.textContent=`${owners.length} طراح — کل ${DB.questions.length} سوال — admin همه را می‌بیند`;
+}
+function showDesignerDetails(owner){
+  const details=document.getElementById("designerDetails");
+  const data = lastDesignersData.find(d=>d.owner===owner);
+  if(!data) return;
+  let html = `<div class="stat-card"><h4>جزئیات ${escapeHtml(owner)} — ${data.total} سوال</h4><div style="max-height:300px; overflow:auto;">`;
+  // گروه‌بندی per category
+  Object.entries(data.catMap).forEach(([cat, arr])=>{
+    const label = (DB.categories.find(c=>c.id===cat)||{}).label||cat;
+    html+=`<div style="margin:8px 0; padding:8px; background:#fff; border-radius:8px; border:1px solid #e5e7eb;"><b>${escapeHtml(label)} (${cat}) — ${arr.length} سوال</b><br>`;
+    // sort by id
+    arr.sort((a,b)=> (a.id||0)-(b.id||0));
+    arr.forEach(q=>{
+      html+=`<div style="font-size:11px; padding:4px 0; border-bottom:1px dashed #e5e7eb;">#${q.id} [${escapeHtml(q.group)}] ${escapeHtml(String(q.q).substring(0,60))} — <span style="color:#065f46;">${escapeHtml(q.c)}</span> <span class="small">(uid:${escapeHtml(q.uid)})</span></div>`;
+    });
+    html+=`</div>`;
+  });
+  html+=`</div><button class="ghost" onclick="document.getElementById('designerDetails').innerHTML=''">بستن</button></div>`;
+  details.innerHTML=html;
+  details.scrollIntoView({behavior:"smooth"});
+}
+function exportDesignersCSV(){
+  if(!lastDesignersData || !lastDesignersData.length) return alert("ابتدا بروزرسانی کنید");
+  let csv="\uFEFFطراح,کل,دسته,گروه,شناسه,متن سوال\n";
+  lastDesignersData.forEach(d=>{
+    d.qs.forEach(q=>{
+      const catLabel = (DB.categories.find(c=>c.id===q.category)||{}).label||q.category;
+      csv+=`"${String(d.owner).replace(/"/g,'""')}","${d.total}","${String(catLabel).replace(/"/g,'""')}","${String(q.group).replace(/"/g,'""')}","${q.id}","${String(q.q).replace(/"/g,'""').replace(/\r?\n/g,' | ')}"\n`;
+    });
+  });
+  const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="طراحان_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+let lastExamRows = [];
+let lastExamHeader = [];
+async function loadExamResults(){
+  switchTab('examResults');
+  const info=document.getElementById("examResultInfo"), err=document.getElementById("examResultError"), thead=document.getElementById("examResultHead"), tbody=document.getElementById("examResultBody");
+  err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
+  // دسته‌ها برای فیلتر
+  const catSel=document.getElementById("filterExamCat");
+  if(catSel && DB && DB.categories){
+    const cur=catSel.value;
+    catSel.innerHTML='<option value="">همه دسته‌ها</option>';
+    DB.categories.forEach(c=>{ const o=document.createElement("option"); o.value=c.id; o.textContent=c.label; if(o.value===cur) o.selected=true; catSel.appendChild(o); });
+  }
+  try{
+    const d = await fetchAdmin("adminGetLogs", {logType:"exam"});
+    if(!d.header || !Array.isArray(d.rows)) throw new Error("ساختار لاگ نامعتبر");
+    lastExamHeader=d.header; lastExamRows=d.rows.slice();
+    info.textContent=`کل: ${d.total} — نمایش ${d.rows.length} ردیف آخر — برای اعتراض، روی 👁 بزنید تا کارنامه دقیق مثل عکس دانش‌آموز ببینید`;
+    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(faHeader(h))}</th>`).join("")+"<th>نمایش</th></tr>";
+    renderExamResults();
+  }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
+}
+function renderExamResults(){
+  const tbody=document.getElementById("examResultBody");
+  const thead=document.getElementById("examResultHead");
+  if(!tbody) return;
+  tbody.innerHTML="";
+  const q=document.getElementById("searchExamStudent").value.trim().toLowerCase();
+  const fc=document.getElementById("filterExamCat").value;
+  let rows = lastExamRows.slice();
+  // فیلتر
+  if(q) rows = rows.filter(r=> String(r[1]||"").toLowerCase().includes(q) || String(r[2]||"").toLowerCase().includes(q));
+  if(fc) rows = rows.filter(r=> String(r[3]||"")===fc);
+  // نمایش معکوس (جدید اول)
+  rows.slice().reverse().forEach((row, idx)=>{
+    const attemptId = String(row[7]||"");
+    const studentId = String(row[2]||"");
+    const name = String(row[1]||"");
+    const tr=document.createElement("tr");
+    const catIdx = lastExamHeader.indexOf("category");
+    let html = row.map((c,i)=>{
+      let v=String(c??"");
+      if(i===catIdx) v=faCategory(v);
+      if(i===0 && v.includes("T")){ try{ v=new Date(v).toLocaleString('fa-IR'); }catch(e){} }
+      return `<td>${escapeHtml(v)}</td>`;
+    }).join("");
+    // دکمه نمایش کارنامه
+    const btn = attemptId ? `<button class="ghost" style="padding:4px 8px; font-size:11px;" onclick="viewExam('${escapeHtml(attemptId)}','${escapeHtml(studentId)}','${escapeHtml(name)}')">👁 نمایش</button>` : `<span class="small">بدون شناسه</span>`;
+    html += `<td>${btn}</td>`;
+    tr.innerHTML=html;
+    tbody.appendChild(tr);
+  });
+  if(rows.length===0) tbody.innerHTML=`<tr><td colspan="${lastExamHeader.length+1}" style="text-align:center;">موردی یافت نشد</td></tr>`;
+}
+function filterExamResults(){ renderExamResults(); }
+async function viewExam(attemptId, studentId, name){
+  const modal=document.getElementById("examViewModal"), title=document.getElementById("examViewTitle"), meta=document.getElementById("examViewMeta"), body=document.getElementById("examViewBody");
+  modal.classList.remove("hidden");
+  title.textContent=`کارنامه ${name||studentId} — ${attemptId?attemptId.substring(0,8):""}`;
+  meta.innerHTML="در حال بارگیری...";
+  body.innerHTML="";
+  try{
+    const d = await fetchAdmin("getExamResult", {attemptId:attemptId, studentId:studentId});
+    if(!d.ok) throw new Error(d.error||"خطا");
+    const catLabel = faCategory(d.category||"");
+    const dur = d.durationSec ? Math.floor(d.durationSec/60)+":"+String(d.durationSec%60).padStart(2,"0") : "-";
+    const ts = d.timestamp ? new Date(d.timestamp).toLocaleString('fa-IR') : "";
+    meta.innerHTML=`<b>نوع آزمون: ${escapeHtml(catLabel)}</b> — نمره: <b style="color:${d.score>=5?'#065f46':'#991b1b'}">${d.score} از ${d.total}</b> — زمان صرف شده: ${dur} — تاریخ: ${ts} — شناسه: ${escapeHtml(d.attemptId||attemptId)} — IP: ${escapeHtml(d.ip||"")}`;
+    body.innerHTML="";
+    const review = d.review || [];
+    if(review.length===0 && d.answersJson){
+      // fallback: try parse answersJson
+      try{ const ans=JSON.parse(d.answersJson); ans.forEach(a=>{ body.innerHTML+=`<tr class="bad"><td>${escapeHtml(a.uid)}</td><td>${escapeHtml(a.answer)}</td><td>—</td></tr>`; }); }catch(e){}
+    }
+    review.forEach(r=>{
+      const tr=document.createElement("tr");
+      tr.className = r.ok ? "ok" : "bad";
+      tr.innerHTML=`<td style="text-align:right;">${escapeHtml(r.q)}</td><td style="text-align:center; font-weight:700; color:${r.ok?'#065f46':'#991b1b'}">${escapeHtml(r.user||"—")}</td><td style="text-align:center; font-weight:700; color:#065f46">${escapeHtml(r.correct||"—")}</td>`;
+      body.appendChild(tr);
+    });
+    if(review.length===0) body.innerHTML=`<tr><td colspan="3" style="text-align:center;">جزئیات پاسخ‌ها در دسترس نیست (کش منقضی). فقط نمره ${d.score}/${d.total} موجود است. برای جزئیات کامل، آزمون را در 24 ساعت اول ببینید.</td></tr>`;
+  }catch(e){
+    meta.innerHTML=`<span style="color:#991b1b">خطا: ${escapeHtml(e.message)}</span>`;
+  }
+}
+function closeExamModal(){ document.getElementById("examViewModal").classList.add("hidden"); }
+function printExamView(){ const w=window.open("","_blank"); const html=document.getElementById("examViewModal").innerHTML; w.document.write("<html><head><title>کارنامه</title></head><body>"+html+"</body></html>"); w.document.close(); w.print(); }
+
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 // ورود خودکار فقط اگر توکن معتبر باشد - جلوگیری از قفل شدن روی admin
@@ -1489,5 +1722,23 @@ setTimeout(()=>{
   }
 }, 1500);
 </script>
+
+<!-- مودال نمایش آزمون دقیق -->
+<div id="examViewModal" class="exam-modal hidden" onclick="if(event.target===this) closeExamModal()">
+  <div class="box">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <h3 style="margin:0;" id="examViewTitle">نتیجه آزمون</h3>
+      <button class="ghost" onclick="closeExamModal()">✖</button>
+    </div>
+    <div id="examViewMeta" class="small" style="margin-bottom:10px; line-height:1.8;"></div>
+    <div class="table-wrap"><table class="exam-table"><thead><tr><th>سوال</th><th>پاسخ شما</th><th>پاسخ صحیح</th></tr></thead><tbody id="examViewBody"></tbody></table></div>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button onclick="closeExamModal()">بستن</button>
+      <button class="ghost" onclick="printExamView()">🖨️ چاپ</button>
+    </div>
+  </div>
+</div>
+
+
 </body>
 </html>
