@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v3.8</title>
+<title>پنل مدیریت آزمون - v3.9</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -49,12 +49,15 @@
   .danger-zone .btn-factory{ background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; border:none; padding:12px 18px; border-radius:10px; font-weight:800; font-size:14px; width:100%; cursor:pointer; box-shadow:0 4px 12px rgba(220,38,38,.3); }
   .danger-zone .btn-factory:hover{ background:linear-gradient(135deg,#b91c1c,#7f1d1d); }
 
+.blink{ animation: blink 1s infinite; }
+@keyframes blink{0%{opacity:1} 50%{opacity:.45} 100%{opacity:1}}
+.reported-btn{ background:#d1fae5 !important; color:#065f46 !important; border:1px solid #6ee7b7 !important; }
 </style>
 </head>
 <body>
 <header>
   <h1>🔐 پنل مدیریت آزمون آنلاین</h1>
-  <p>نسخه ۳.۸ — رفع ۳ باگ بحرانی + خروج خودکار کاربر حذف شده</p>
+  <p>نسخه ۳.۹ — گزارش‌های من + قفل فعال + حسابرسی دقیق حذف/افزودن + ذخیره خودکار</p>
 </header>
 <div id="globalLoading" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%); background:#1f2937; color:#fff; padding:8px 14px; border-radius:99px; font-size:12px; z-index:9999; box-shadow:0 4px 12px rgba(0,0,0,.2);">⏳ در حال ارتباط با سرور...</div>
 
@@ -93,6 +96,7 @@
     <div class="tabs">
       <div class="tab active" data-tab="questions" onclick="switchTab('questions')">📝 سوالات (<span id="qCount">0</span>)</div>
       <div class="tab" data-tab="categories" onclick="switchTab('categories')">📁 دسته‌بندی‌ها</div>
+      <div class="tab" data-tab="myissues" onclick="switchTab('myissues')" id="tabBtnMyIssues" style="display:none;">📤 گزارش‌های من</div>
       <div class="tab" data-tab="users" onclick="switchTab('users')">👥 کاربران</div>
       <div class="tab" data-tab="logs" onclick="switchTab('logs')">📊 لاگ‌ها</div>
       <div class="tab" data-tab="issues" onclick="switchTab('issues')">⚠️ گزارش ایرادها</div>
@@ -210,6 +214,17 @@
       <div class="table-wrap"><table><thead id="issueHead"></thead><tbody id="issueBody"></tbody></table></div>
     </div>
 
+    <!-- تب گزارش‌های من — فقط ویراستار -->
+    <div id="tab-myissues" class="card hidden">
+      <h3>📤 گزارش‌های ارسالی من</h3>
+      <p class="small">اینجا گزارش‌هایی که خودت فرستادی را می‌بینی — سوال، گزینه‌ها، ایراد و وضعیت. اگر سوال اصلاح شد، مدیر آن را ویرایش می‌کند و تاریخچه اینجا می‌ماند.</p>
+      <div class="flex"><button onclick="loadMyIssues()">🔄 بارگیری گزارش‌های من</button><button class="ghost" onclick="exportMyIssuesCSV()">⬇️ خروجی CSV</button></div>
+      <div id="myIssueInfo" class="small"></div>
+      <div id="myIssueError" class="alert alert-err hidden"></div>
+      <div class="table-wrap"><table><thead id="myIssueHead"></thead><tbody id="myIssueBody"></tbody></table></div>
+      <p class="small">نکته: دکمه «⚠️ گزارش ایراد» جلوی سوالات دیگران بعد از ارسال گزارش، سبز و تیک‌دار می‌شود.</p>
+    </div>
+
     <!-- تب حسابرسی -->
     <div id="tab-audit" class="card hidden">
       <h3>📜 حسابرسی — رد پای مدیران</h3>
@@ -219,10 +234,10 @@
       <div id="auditError" class="alert alert-err hidden"></div>
       <div class="table-wrap"><table><thead id="auditHead"></thead><tbody id="auditBody"></tbody></table></div>
       <p class="small">ستون detail توضیح کامل را دارد. failCount و lockUntil را پایین ببینید.</p>
-      <div class="alert alert-info small" style="margin-top:10px;">
-        <b>failCount و lockUntil در شیت Users چیست؟</b><br>
-        `failCount` = تعداد تلاش ناموفق ورود (برای قفل ۱۵ دقیقه‌ای ضد حدس رمز) — الان در Cache نگهداری می‌شود و هر ۱۵ دقیقه صفر می‌شود.<br>
-        `lockUntil` = زمان پایان قفل (قدیمی، الان استفاده نمی‌شود چون Cache جایگزین شده). می‌توانید این دو ستون را نادیده بگیرید یا برای دیباگ بگذارید بماند. اگر بخواهید قفل دستی را بردارید، مقدار lockUntil را پاک کنید.
+      <div class="alert alert-ok small" style="margin-top:10px;">
+        <b>failCount و lockUntil فعال شد (v3.9):</b><br>
+        `failCount` = تعداد تلاش ناموفق (هر ورود اشتباه +1، ورود موفق → 0). در <b>Cache و شیت Users ستون G</b> همزمان نوشته می‌شود.<br>
+        `lockUntil` = زمان پایان قفل ۱۵ دقیقه‌ای پس از ۵ تلاش ناموفق — در <b>Cache و شیت Users ستون H (ISO)</b> ثبت می‌شود و در <b>تب حسابرسی</b> با عمل <code>accountLocked</code> یا <code>failedLogin</code> لاگ می‌شود. برای باز کردن دستی، مقدار H را پاک کنید و Cache را صبر کنید یا کاربر را یک بار فعال/غیرفعال کنید.
       </div>
     </div>
 
@@ -274,7 +289,7 @@
         <div id="factoryMsg" style="margin-top:8px;"></div>
       </div>
 
-  <footer>پنل مدیریت امن ۳.۸ — ترمیم شماره‌گذاری و UID و CSV — AminSystem2000</footer>
+  <footer>پنل مدیریت امن ۳.۹ — گزارش من + قفل + حسابرسی + ذخیره خودکار — AminSystem2000</footer>
 </div>
 
 <!-- مودال ویرایش سوال -->
@@ -332,7 +347,8 @@ function faCategory(c){ return CATEGORY_FA[c] || c; }
 function showMsg(elId, text, ok=true){
   const el=document.getElementById(elId);
   el.innerHTML = `<div class="alert ${ok?'alert-ok':'alert-err'}">${text}</div>`;
-  setTimeout(()=> el.innerHTML="", 6000);
+  const isSave = elId==="saveMsg";
+  setTimeout(()=> el.innerHTML="", isSave?10000:6000);
 }
 
 // ============ ورود ============
@@ -382,6 +398,8 @@ function showDashboard(){
   if(logsTab) logsTab.style.display = isEditor() ? "none" : "";
   if(auditTab) auditTab.style.display = isMainAdmin() ? "" : "none"; // فقط admin اصلی
   if(issuesTab) issuesTab.style.display = isAdmin() ? "" : "none"; // ویراستار اصلاً گزارش‌ها را نبیند
+  const myIssuesTab = document.querySelector('[data-tab="myissues"]');
+  if(myIssuesTab) myIssuesTab.style.display = isEditor() ? "" : "none";
   // در تب سوالات، دکمه‌های خطرناک را برای ویراستار مخفی کن
   const btnExport = document.getElementById("btnExportJSON");
   const lblImport = document.getElementById("lblImportJSON");
@@ -423,6 +441,9 @@ function showDashboard(){
   loadDB().then(()=> {
     // همه نقش‌ها برای تشخیص (حذف شده) نیاز به لیست کاربران دارند — ولی تب کاربران فقط برای admin نمایش داده می‌شود
     setTimeout(()=> loadUsers().catch(()=>{}), 700);
+    if(isEditor()){
+      setTimeout(()=> loadMyIssues().catch(()=>{}), 900);
+    }
   });
 }
 let _verifyInProgress=false;
@@ -474,7 +495,7 @@ function switchTab(name){
   const cur = document.querySelector(".tab.active");
   if(cur && cur.dataset.tab===name) return;
   document.querySelectorAll(".tab").forEach(t=> t.classList.toggle("active", t.dataset.tab===name));
-  ["questions","categories","users","logs","issues","audit","settings"].forEach(n=>{
+  ["questions","categories","myissues","users","logs","issues","audit","settings"].forEach(n=>{
     const el=document.getElementById("tab-"+n);
     if(el) el.classList.toggle("hidden", n!==name);
   });
@@ -483,6 +504,12 @@ function switchTab(name){
   if(name==='users' && isAdmin() && !_tabLoading.users){
     _tabLoading.users=true;
     loadUsers().finally(()=> _tabLoading.users=false);
+  }
+  if(name==='myissues' && isEditor()){
+    loadMyIssues();
+  }
+  if(name==='issues' && isAdmin()){
+    // برای ادمین، گزارش‌ها را خودکار بارگیری نکن — دکمه دارد
   }
 }
 
@@ -675,7 +702,12 @@ function renderQuestions(){
     const ownerDisplay = ownerExists ? escapeHtml(item.owner||"") : `<span style="color:#991b1b" title="کاربر حذف شده">${escapeHtml(item.owner||"—")} (حذف شده)</span>`;
     let ops = "";
     if(isEditor() && !isOwn){
-      ops = `<div class="actions"><button class="ghost" onclick="reportIssue('${item.uid}')">⚠️ گزارش ایراد</button><span class="small" style="align-self:center;">مال ${ownerDisplay}</span></div>`;
+      const alreadyReported = typeof reportedUids !== 'undefined' && reportedUids.has(item.uid);
+      if(alreadyReported){
+        ops = `<div class="actions"><button class="ghost reported-btn" disabled>✅ گزارش شد</button><span class="small" style="align-self:center;">مال ${ownerDisplay}</span></div>`;
+      } else {
+        ops = `<div class="actions"><button class="ghost" onclick="reportIssue('${item.uid}')">⚠️ گزارش ایراد</button><span class="small" style="align-self:center;">مال ${ownerDisplay}</span></div>`;
+      }
     } else if(isEditor() && isOwn){
       ops = `<div class="actions"><button onclick="editQ(${realIdx})">ویرایش</button><button class="danger" onclick="delQ(${realIdx})">حذف</button></div>`;
     } else {
@@ -799,7 +831,12 @@ function saveModal(){
   closeModal();
   renderAll();
   window._dirtyAfterEdit=true;
-  showMsg("saveMsg","ذخیره محلی شد - حتما «ذخیره در سرور» را بزنید",true);
+  showMsg("saveMsg","ذخیره محلی شد - حتما «ذخیره در سرور» را بزنید, (سپس سوال جدید طرح نمائید).",true);
+  // چشمک زدن دکمه ذخیره برای جلب توجه
+  try{
+    const btn=document.getElementById("btnSaveServer");
+    if(btn){ btn.classList.add("blink"); setTimeout(()=>btn.classList.remove("blink"), 8000); }
+  }catch(e){}
 }
 function delQ(idx){
   const q=DB.questions[idx];
@@ -807,10 +844,14 @@ function delQ(idx){
     return alert("⛔ فقط سوالات خودتان را می‌توانید حذف کنید");
   }
   if(!confirm("حذف سوال #"+(idx+1)+"؟")) return;
+  const deletedInfo = q;
   DB.questions.splice(idx,1);
   renderAll();
   window._dirtyAfterEdit=true;
-  showMsg("saveMsg","حذف محلی شد - برای اعمال نهایی «ذخیره در سرور» را بزنید",true);
+  const msgEl=document.getElementById("saveMsg");
+  if(msgEl) msgEl.innerHTML=`<div class="alert alert-warn blink">⏳ منتظر بمانید تا حذف در سرور انجام شود...</div>`;
+  // ذخیره خودکار در پس‌زمینه
+  setTimeout(()=>{ saveToServer().then(()=>{ if(msgEl) msgEl.innerHTML=`<div class="alert alert-ok">✅ حذف در سرور ثبت شد — [${escapeHtml(deletedInfo.category)}/${escapeHtml(deletedInfo.group)}#${deletedInfo.id}] "${escapeHtml(String(deletedInfo.q).substring(0,30))}" توسط ${escapeHtml(currentUser)}</div>`; setTimeout(()=>{ if(msgEl) msgEl.innerHTML=""; }, 10000); }).catch(e=>{ if(msgEl) msgEl.innerHTML=`<div class="alert alert-err">خطا در حذف سرور: ${escapeHtml(e.message)} — دوباره «ذخیره در سرور» را بزنید</div>`; }); }, 400);
 }
 
 // ============ دسته‌ها ============
@@ -1137,7 +1178,10 @@ async function reportIssue(uid){
   if(!issue.trim()) return alert("توضیح را وارد کنید");
   try{
     const d = await fetchAdmin("reportIssue", {uid:uid, issue:issue});
-    alert("✅ گزارش ثبت شد - مدیر آن را در تب «گزارش ایرادها» می‌بیند");
+    try{ reportedUids.add(uid); renderQuestions(); }catch(e){}
+    // اگر تب گزارش‌های من باز است، رفرش کن
+    try{ if(!document.getElementById("tab-myissues").classList.contains("hidden")) loadMyIssues(); }catch(e){}
+    alert("✅ گزارش ثبت شد - در تب «📤 گزارش‌های من» می‌توانی آن را ببینی. دکمه جلوی سوال هم تیک خورد.");
   }catch(e){ alert("خطا: "+e.message); }
 }
 async function deleteSingleLog(row, attemptId, type){
@@ -1152,6 +1196,82 @@ async function deleteSingleLog(row, attemptId, type){
 }
 let lastIssues={header:[], rows:[]}, lastAudit={header:[], rows:[]};
 let existingUsersSet = new Set(["admin"]); // برای نمایش (حذف شده)
+let reportedUids = new Set();
+let lastMyIssues = {header:[], rows:[]};
+
+async function loadMyIssues(){
+  const info=document.getElementById("myIssueInfo"), err=document.getElementById("myIssueError"), thead=document.getElementById("myIssueHead"), tbody=document.getElementById("myIssueBody");
+  if(!info||!thead) return;
+  err.classList.add("hidden"); info.textContent="در حال بارگیری..."; thead.innerHTML=""; tbody.innerHTML="";
+  try{
+    const d = await fetchAdmin("getMyIssues", {});
+    if(!d.header || !Array.isArray(d.rows)) throw new Error("ساختار گزارش نامعتبر");
+    lastMyIssues=d;
+    // پر کردن reportedUids برای تیک جلوی سوالات
+    reportedUids = new Set(d.rows.map(r=> String(r[3]||""))); // questionUid ستون 3
+    // رندر دوباره سوالات تا تیک بیاید
+    try{ renderQuestions(); }catch(e){}
+    info.textContent=`گزارش‌های شما: ${d.total||0} — نمایش ${d.rows.length}`;
+    // هدر فارسی
+    thead.innerHTML="<tr>"+d.header.map(h=>`<th>${escapeHtml(HEADER_FA[h]||h)}</th>`).join("")+"<th>گزینه‌ها</th><th>وضعیت سوال</th></tr>";
+    tbody.innerHTML="";
+    if(!d.rows || d.rows.length===0){ tbody.innerHTML=`<tr><td colspan="${(d.header||[]).length+2}" style="text-align:center;">هنوز گزارشی نفرستادی</td></tr>`; return; }
+    // برای هر گزارش، سوال و گزینه‌ها را از DB پیدا کن
+    d.rows.slice().reverse().forEach(row=>{
+      const uid = String(row[3]||"");
+      const qText = String(row[6]||"");
+      const issue = String(row[7]||"");
+      const cat = String(row[4]||"");
+      const grp = String(row[5]||"");
+      const reporter = String(row[1]||"");
+      // پیدا کردن سوال در DB فعلی برای گزینه‌ها
+      let qObj = null;
+      if(DB && DB.questions) qObj = DB.questions.find(q=> String(q.uid)===uid);
+      let optsHtml = "";
+      let statusHtml = "";
+      if(qObj){
+        optsHtml = (qObj.a||[]).map((a,i)=> `<div style="font-size:11px; ${a===qObj.c?'color:#065f46;font-weight:700;background:#ecfdf5;padding:2px 4px;border-radius:6px':''}">${escapeHtml(a)}${a===qObj.c?' ✅':''}</div>`).join("");
+        statusHtml = `<span style="color:#065f46">✅ سوال هنوز موجود — دسته ${escapeHtml((DB.categories.find(c=>c.id===qObj.category)||{}).label||qObj.category)}/${escapeHtml(qObj.group)}#${qObj.id}</span>`;
+      } else {
+        // سوال حذف شده یا ویرایش شده
+        optsHtml = `<span class="small" style="color:#991b1b">سوال در بانک فعلی یافت نشد (حذف یا ویرایش شده)</span>`;
+        statusHtml = `<span style="color:#991b1b">⚠️ ناموجود</span>`;
+      }
+      const tr=document.createElement("tr");
+      tr.innerHTML = `<td>${escapeHtml(qText.substring(0,50))}</td><td>${optsHtml}</td><td style="max-width:200px; white-space:pre-wrap;">${escapeHtml(issue)}</td><td>${escapeHtml(reporter)}</td><td>${escapeHtml(faCategory(cat))}/${escapeHtml(grp)}</td><td>${statusHtml}</td>`;
+      // توجه: ستون reporter اضافه شد, اما header اصلی reporter دارد — برای سادگی reporter را دوباره نشان می‌دهیم
+      // ساختار سطر: questionText, options, issue, reporter, cat/grp, status
+      // برای هماهنگی با header اضافه: questionText | options | issue | reporter | cat/grp | status
+      tbody.appendChild(tr);
+    });
+    // بازنویسی header برای ستون‌های جدید
+    thead.innerHTML="<tr><th>متن سوال</th><th>گزینه‌ها (صحیح سبز)</th><th>ایراد شما</th><th>فرستنده</th><th>دسته/گروه</th><th>وضعیت</th></tr>";
+  }catch(e){ info.textContent=""; err.textContent="خطا: "+e.message; err.classList.remove("hidden"); }
+}
+function exportMyIssuesCSV(){
+  if(!lastMyIssues.rows || !lastMyIssues.rows.length) return alert("ابتدا بارگیری کنید");
+  const faH = lastMyIssues.header.map(h=> HEADER_FA[h]||h);
+  const headerLine = faH.map(h=>`"${String(h).replace(/"/g,'""')}"`).join(",") + ',"گزینه‌ها","وضعیت"';
+  const rowsLines = lastMyIssues.rows.map(r=>{
+    const uid = String(r[3]||"");
+    let qObj=null; if(DB && DB.questions) qObj=DB.questions.find(q=> String(q.uid)===uid);
+    const opts = qObj ? (qObj.a||[]).join(" | ") : "";
+    const status = qObj ? "موجود" : "حذف شده";
+    const base = r.map((v,idx)=>{
+      let s=String(v||"");
+      if(lastMyIssues.header[idx]==="category"){ for(const [en,fa] of Object.entries(CATEGORY_FA)) s=s.split(en).join(fa); }
+      s=s.replace(/\r?\n/g," | ");
+      return `"${s.replace(/"/g,'""')}"`;
+    }).join(",");
+    return base + `,"${opts.replace(/"/g,'""')}","${status}"`;
+  }).join("\n");
+  const csv = headerLine + "\n" + rowsLines;
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="گزارشهای_من_"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 async function loadIssues(){
   switchTab("issues");
   const info=document.getElementById("issueInfo"), err=document.getElementById("issueError"), thead=document.getElementById("issueHead"), tbody=document.getElementById("issueBody");
