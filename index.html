@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>آزمون آنلاین - نسخه امن ۳.۷</title>
+<title>آزمون آنلاین - نسخه امن ۴.۱</title>
 <meta name="description" content="آزمون آنلاین با بانک پویا و تصحیح امن">
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" crossorigin="anonymous"></script>
 <style>
@@ -134,8 +134,8 @@
 
   <!-- باکس شروع -->
   <div class="box center" id="startBox">
-    <h2>📝 آزمون آنلاین <span style="font-size:12px; background:#eef2ff; color:#4e73df; padding:2px 8px; border-radius:99px;">نسخه امن ۳.۷</span></h2>
-    <p class="subtitle">بانک ۴۰۰ سوال در ۴ دسته - هر آزمون ۱۰ سوال تصادفی - زمان ۳ دقیقه</p>
+    <h2>📝 آزمون آنلاین <span style="font-size:12px; background:#eef2ff; color:#4e73df; padding:2px 8px; border-radius:99px;">نسخه امن ۴.۱</span></h2>
+    <p class="subtitle" id="subtitle">در حال بارگیری اطلاعات آزمون...</p>
 
     <div id="secureBadge" class="alert alert-info hidden" style="text-align:center"></div>
 
@@ -155,9 +155,6 @@
     </div>
 
     <a class="admin-link" href="admin.html">🔐 ورود مدیریت / پنل ادمین</a>
-    <div style="margin-top:10px; font-size:11px; color:#9ca3af;">
-      <span id="dbInfo"></span>
-    </div>
   </div>
 
   <!-- باکس آزمون -->
@@ -191,7 +188,7 @@
     </div>
   </div>
 
-  <footer>طراحی اولیه: AminSystem2000 — نسخه امن ۳.۷ بازمهندسی شده • <span id="year"></span></footer>
+  <footer>طراحی اولیه: AminSystem2000 — نسخه امن ۴.۱ بازمهندسی شده • <span id="year"></span></footer>
 </div>
 
 <script>
@@ -204,7 +201,7 @@ const WEB_APP_URL = (() => {
   const h = location.hostname;
   if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
   if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
-  return "https://script.google.com/macros/s/AKfycbwo8CPeDKCxQecbKeWTntXzLZPikaPxqMqZrEXwEttEV9OO0KfSueOZOmhVhUymHu8/exec";
+  return "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
 })();
 const USE_SECURE_MODE = WEB_APP_URL && WEB_APP_URL.startsWith("https://");
 
@@ -236,7 +233,7 @@ const categorySelect = document.getElementById("category");
 const categoryResult = document.getElementById("categoryResult");
 const progressBar = document.getElementById("progressBar");
 const secureBadge = document.getElementById("secureBadge");
-const dbInfo = document.getElementById("dbInfo");
+const dbInfo = document.getElementById("dbInfo"); // removed bottom line, may be null
 
 let qs = []; // سوالات فعلی آزمون (در حالت امن بدون c)
 let currentIndex = 0;
@@ -283,6 +280,39 @@ function showSecureBadge(){
   }
 }
 
+
+// ============ تنظیمات آزمون پویا ============
+let EXAM_CONFIG = {duration:180, count:10};
+async function fetchConfig(){
+  try{
+    if(USE_SECURE_MODE){
+      const r=await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getConfig"})});
+      const t=await r.text();
+      if(t.trim().startsWith("<")) throw new Error("HTML");
+      const j=JSON.parse(t);
+      if(j.ok){ EXAM_CONFIG={duration:j.duration||180, count:j.count||10}; return EXAM_CONFIG; }
+    }
+  }catch(e){ console.warn("fetchConfig fail, use default",e.message); }
+  return EXAM_CONFIG;
+}
+function updateSubtitle(cfg){
+  const el=document.getElementById("subtitle");
+  if(!el) return;
+  const total = DB && DB.questions ? DB.questions.length : 0;
+  const cats = DB && DB.categories ? DB.categories.length : 0;
+  const cnt = cfg ? cfg.count : EXAM_CONFIG.count;
+  const dur = cfg ? cfg.duration : EXAM_CONFIG.duration;
+  const durMin = Math.floor(dur/60);
+  const durSec = dur%60;
+  const durText = durSec ? `${durMin} دقیقه و ${durSec} ثانیه` : `${durMin} دقیقه`;
+  if(total && cats){
+    el.textContent = `بانک ${total} سوال در ${cats} دسته — هر آزمون ${cnt} سوال تصادفی — زمان ${durText}`;
+  } else {
+    el.textContent = `هر آزمون ${cnt} سوال تصادفی — زمان ${durText}`;
+  }
+}
+// همچنین بعد از لود اولیه DB، یک بار دیگر subtitle را به‌روزرسانی کن
+
 // ============ بارگذاری بانک ============
 async function loadDB(){
   try{
@@ -294,7 +324,11 @@ async function loadDB(){
       categoryMap[c.id]=c.label;
     });
     populateCategorySelect();
-    dbInfo.textContent = `بانک یکپارچه: ${DB.questions.length} سوال در ${DB.categories.length} دسته`;
+    // به‌روزرسانی عنوان پویا
+    try{
+      const cfg = await fetchConfig();
+      updateSubtitle(cfg);
+    }catch(e){ updateSubtitle(null); }
     console.log("DB loaded", DB.meta);
   } catch(e){
     console.warn("DB json not found, fallback to legacy JS files", e);
@@ -308,7 +342,7 @@ async function loadDB(){
     DB = {categories: fallbackCats, questions: []};
     fallbackCats.forEach(c=> categoryMap[c.id]=c.label);
     populateCategorySelect();
-    dbInfo.textContent = "حالت سازگار قدیمی - ۴ دسته";
+    if(dbInfo) dbInfo.textContent = "حالت سازگار قدیمی - ۴ دسته";
   }
 }
 function populateCategorySelect(){
@@ -429,7 +463,11 @@ async function startExam(){
     if(msg.includes("<!DOCTYPE") || msg.includes("ppConfig") || msg.includes("<html")){
       msg = "پاسخ HTML از گوگل - احتمالاً اتصال یا deployment مشکل دارد. مطمئن شوید WEB_APP_URL درست است و با VPN خاموش امتحان کنید.";
     }
-    alert("خطا در شروع آزمون: "+msg + "\n\nاگر این خطا فقط گاهی می‌آید، دکمه «بارگیری از سرور» را نزنید و صفحه را رفرش کنید.");
+    let friendly = msg;
+    if(msg.includes("Failed to fetch") || msg.includes("fetch") || msg.includes("بانک") || msg.includes("سوالی دریافت نشد") || msg.includes("سرور در حال بیدار")){
+      friendly = msg + "\n\n💡 راه‌حل: ابتدا با حساب admin وارد پنل مدیریتی (admin.html) شوید و دکمه «🔄 بارگیری از سرور» را بزنید تا سوالات بارگیری شود، سپس آزمون را شروع کنید. اگر تازه Deploy کرده‌اید، یک بار «بازنشانی کارخانه» در تنظیمات و بعد «ذخیره در سرور» هم کمک می‌کند.";
+    }
+    alert("خطا در شروع آزمون: "+friendly);
   } finally {
     btn.disabled=false; btn.textContent="شروع آزمون";
   }

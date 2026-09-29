@@ -289,6 +289,25 @@
       <button onclick="changePass()">تغییر رمز</button>
       <div id="passMsg"></div>
       <hr>
+      <div style="background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px; padding:12px; margin:12px 0;">
+      <h4 style="margin:0 0 8px; color:#0369a1;">⏱️ تنظیمات آزمون</h4>
+      <p class="small" style="margin:0 0 8px;">اینجا تعداد سوالات هر آزمون و زمان آن را تغییر دهید. خط بالای صفحه دانش‌آموزان (<code>بانک X سوال در Y دسته — هر آزمون N سوال — زمان M دقیقه</code>) خودکار از همین مقادیر پر می‌شود.</p>
+      <div class="grid2">
+        <label style="font-size:13px;">تعداد سوال هر آزمون (۵ تا ۵۰)
+          <input id="cfgCount" type="number" min="5" max="50" placeholder="مثلاً 10">
+        </label>
+        <label style="font-size:13px;">زمان آزمون (ثانیه، ۳۰ تا ۳۶۰۰)
+          <input id="cfgDuration" type="number" min="30" max="3600" placeholder="مثلاً 180">
+          <span class="small" id="cfgDurationHint" style="color:#6b7280;"></span>
+        </label>
+      </div>
+      <div class="flex" style="margin-top:8px;">
+        <button onclick="loadExamConfig()">🔄 بارگیری تنظیمات فعلی</button>
+        <button class="secondary" onclick="saveExamConfig()">💾 ذخیره تنظیمات</button>
+      </div>
+      <div id="cfgMsg" style="margin-top:8px;"></div>
+      <div class="small" id="cfgCurrent" style="margin-top:6px; color:#0369a1;"></div>
+      </div>
       <div id="backupSection">
       <h4>پشتیبان‌گیری</h4>
       <button class="secondary" onclick="backupAll()">⬇️ دانلود پشتیبان کامل (JSON)</button>
@@ -360,7 +379,7 @@ const WEB_APP_URL = (() => {
   const h = location.hostname;
   if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
   if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
-  return "https://script.google.com/macros/s/AKfycbwo8CPeDKCxQecbKeWTntXzLZPikaPxqMqZrEXwEttEV9OO0KfSueOZOmhVhUymHu8/exec";
+  return "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
 })();
 const DB_URL = "assets/questions_db.json";
 async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
@@ -1721,6 +1740,47 @@ setTimeout(()=>{
     }
   }
 }, 1500);
+
+// ============ تنظیمات آزمون پویا ============
+async function loadExamConfig(){
+  const msg=document.getElementById("cfgMsg");
+  const cur=document.getElementById("cfgCurrent");
+  try{
+    const d=await fetchAdmin("adminGetConfig",{});
+    document.getElementById("cfgCount").value=d.count;
+    document.getElementById("cfgDuration").value=d.duration;
+    const m=Math.floor(d.duration/60), s=d.duration%60;
+    document.getElementById("cfgDurationHint").textContent = `= ${m} دقیقه` + (s? ` و ${s} ثانیه`:``);
+    if(cur) cur.textContent=`فعلی: ${d.count} سوال، ${d.duration} ثانیه (${m} دقیقه)`;
+    if(msg) msg.innerHTML='<div class="alert alert-ok">تنظیمات بارگیری شد</div>';
+    // همچنین عنوان پنل را اگر شد به‌روز کن
+    document.getElementById("cfgDuration").oninput = ()=>{ 
+      const v=parseInt(document.getElementById("cfgDuration").value,10)||0;
+      const mm=Math.floor(v/60), ss=v%60;
+      document.getElementById("cfgDurationHint").textContent = v? `= ${mm} دقیقه`+(ss?` و ${ss} ثانیه`:"") : "";
+    };
+  }catch(e){ if(msg) msg.innerHTML='<div class="alert alert-err">'+escapeHtml(e.message)+'</div>'; }
+}
+async function saveExamConfig(){
+  const msg=document.getElementById("cfgMsg");
+  const cnt=parseInt(document.getElementById("cfgCount").value,10);
+  const dur=parseInt(document.getElementById("cfgDuration").value,10);
+  if(!cnt||!dur) return msg.innerHTML='<div class="alert alert-err">هر دو مقدار را پر کنید</div>';
+  try{
+    const d=await fetchAdmin("adminSaveConfig",{count:cnt, duration:dur});
+    msg.innerHTML='<div class="alert alert-ok">✅ ذخیره شد: '+d.count+' سوال، '+d.duration+' ثانیه</div>';
+    document.getElementById("cfgCurrent").textContent=`فعلی: ${d.count} سوال، ${d.duration} ثانیه`;
+    // بعد از ذخیره، اگر DB لود است، پیام راهنما
+    showMsg("saveMsg","تنظیمات جدید برای آزمون‌های بعدی اعمال می‌شود",true);
+  }catch(e){ msg.innerHTML='<div class="alert alert-err">'+escapeHtml(e.message)+'</div>'; }
+}
+// بارگیری خودکار وقتی تب تنظیمات باز شد
+const _oldSwitchTab = window.switchTab;
+window.switchTab = function(name){
+  if(typeof _oldSwitchTab==="function") _oldSwitchTab(name);
+  if(name==="settings") setTimeout(loadExamConfig, 300);
+};
+
 </script>
 
 <!-- مودال نمایش آزمون دقیق -->
