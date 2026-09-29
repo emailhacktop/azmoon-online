@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>پنل مدیریت آزمون - v4.0</title>
+<title>پنل مدیریت آزمون - v4.1-hardened</title>
 <style>
   :root{ --primary:#4e73df; --success:#1cc88a; --bg:#f4f6f8; --card:#fff; --muted:#6b7280; --danger:#e74a3b; --radius:12px; }
   *{box-sizing:border-box}
@@ -48,7 +48,7 @@
   .danger-zone h4{ color:#991b1b; margin:0 0 8px; }
   .danger-zone .btn-factory{ background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; border:none; padding:12px 18px; border-radius:10px; font-weight:800; font-size:14px; width:100%; cursor:pointer; box-shadow:0 4px 12px rgba(220,38,38,.3); }
   .danger-zone .btn-factory:hover{ background:linear-gradient(135deg,#b91c1c,#7f1d1d); }
-  /* v4.0: designer + exam result */
+  /* v4.1-hardened: designer + exam result */
   .stat-card{ background:#f9fafb; border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin:6px 0; }
   .exam-modal{ position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; padding:12px; z-index:100; }
   .exam-modal .box{ background:#fff; border-radius:12px; max-width:900px; width:100%; max-height:90vh; overflow:auto; padding:18px; }
@@ -250,7 +250,7 @@
       <div class="table-wrap"><table><thead id="auditHead"></thead><tbody id="auditBody"></tbody></table></div>
       <p class="small">ستون detail توضیح کامل را دارد. failCount و lockUntil را پایین ببینید.</p>
       <div class="alert alert-ok small" style="margin-top:10px;">
-        <b>failCount و lockUntil فعال شد (v4.0):</b><br>
+        <b>failCount و lockUntil فعال شد (v4.1-hardened):</b><br>
         `failCount` = تعداد تلاش ناموفق (هر ورود اشتباه +1، ورود موفق → 0). در <b>Cache و شیت Users ستون G</b> همزمان نوشته می‌شود.<br>
         `lockUntil` = زمان پایان قفل ۱۵ دقیقه‌ای پس از ۵ تلاش ناموفق — در <b>Cache و شیت Users ستون H (ISO)</b> ثبت می‌شود و در <b>تب حسابرسی</b> با عمل <code>accountLocked</code> یا <code>failedLogin</code> لاگ می‌شود. برای باز کردن دستی، مقدار H را پاک کنید و Cache را صبر کنید یا کاربر را یک بار فعال/غیرفعال کنید.
       </div>
@@ -360,7 +360,7 @@ const WEB_APP_URL = (() => {
   const h = location.hostname;
   if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
   if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
-  return "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
+  return "https://script.google.com/macros/s/AKfycby79TpveF1Sq5ZITEb7sGdphSfsCyX6wAutY37skETyjB5Dvo2PMzQTWjFmnYzddqidwg/exec";
 })();
 const DB_URL = "assets/questions_db.json";
 async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }

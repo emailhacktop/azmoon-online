@@ -204,7 +204,7 @@ const WEB_APP_URL = (() => {
   const h = location.hostname;
   if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
   if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
-  return "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
+  return "https://script.google.com/macros/s/AKfycby79TpveF1Sq5ZITEb7sGdphSfsCyX6wAutY37skETyjB5Dvo2PMzQTWjFmnYzddqidwg/exec";
 })();
 const USE_SECURE_MODE = WEB_APP_URL && WEB_APP_URL.startsWith("https://");
 
