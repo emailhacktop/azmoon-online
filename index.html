@@ -383,7 +383,7 @@ async function startExam(){
       const resp = await fetch(WEB_APP_URL, {
         method:"POST",
         headers: {"Content-Type":"text/plain;charset=utf-8"},
-        body: JSON.stringify({action:"getExam", category: category})
+        body: JSON.stringify({action:"getExam", category: category, name: userName, studentId: studentIdInput.value.trim()})
       });
       const text = await resp.text();
       if(text.trim().startsWith("<") || text.includes("ppConfig") || text.includes("<!DOCTYPE")){

@@ -366,8 +366,8 @@ const DB_URL = "assets/questions_db.json";
 async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
 
 let DB = null;
-let token = localStorage.getItem("admin_token") || "";
-let currentUser = localStorage.getItem("admin_user") || "";
+let token = sessionStorage.getItem("admin_token") || "";
+let currentUser = sessionStorage.getItem("admin_user") || "";
 let editingIndex = -1;
 let lastLogs = {header:[], rows:[]};
 
@@ -404,22 +404,22 @@ async function doLogin(){
     if(!d.ok) throw new Error(d.error||"خطا");
     token=d.token;
     currentUser=d.username;
-    localStorage.setItem("admin_token", token);
-    localStorage.setItem("admin_user", currentUser);
-    localStorage.setItem("admin_role", d.role||"admin");
+    sessionStorage.setItem("admin_token", token);
+    sessionStorage.setItem("admin_user", currentUser);
+    sessionStorage.setItem("admin_role", d.role||"admin");
     showDashboard();
     showMsg("loginMsg","ورود موفق ✅",true);
   } catch(e){
     showMsg("loginMsg", "خطا: "+e.message, false);
   } finally{ document.getElementById("btnLogin").disabled=false; }
 }
-let currentRole = localStorage.getItem("admin_role") || "admin";
+let currentRole = sessionStorage.getItem("admin_role") || "admin";
 function isEditor(){ return String(currentRole||"").toLowerCase()==="editor"; }
 function isAdmin(){ return String(currentRole||"").toLowerCase()==="admin"; }
 function isMainAdmin(){ return String(currentUser||"").trim().toLowerCase()==="admin"; }
 function showDashboard(){
   if(!token) return;
-  currentRole = localStorage.getItem("admin_role") || "admin";
+  currentRole = sessionStorage.getItem("admin_role") || "admin";
   document.getElementById("loginCard").classList.add("hidden");
   document.getElementById("dashboard").classList.remove("hidden");
   document.getElementById("welcome").textContent = "سلام، "+currentUser+" ";
@@ -507,16 +507,16 @@ function verifyToken(){
         document.getElementById("loginCard").classList.remove("hidden");
         const reason = d.error||"توکن نامعتبر";
         document.getElementById("loginMsg").innerHTML=`<div class="alert alert-err">⛔ نشست باطل شد — ${escapeHtml(reason)} — لطفاً دوباره وارد شوید</div>`;
-        localStorage.removeItem("admin_token");
-        localStorage.removeItem("admin_user");
-        localStorage.removeItem("admin_role");
+        sessionStorage.removeItem("admin_token");
+        sessionStorage.removeItem("admin_user");
+        sessionStorage.removeItem("admin_role");
         token=""; currentUser="";
         if(window._verifyInterval) clearInterval(window._verifyInterval);
       } else {
         // نقش به‌روز شد؟
         if(d.role && d.role!==currentRole){
           currentRole=d.role;
-          localStorage.setItem("admin_role", d.role);
+          sessionStorage.setItem("admin_role", d.role);
           showDashboard();
         }
       }
@@ -527,9 +527,9 @@ function verifyToken(){
   .finally(()=> _verifyInProgress=false);
 }
 function logout(){
-  localStorage.removeItem("admin_token");
-  localStorage.removeItem("admin_user");
-  localStorage.removeItem("admin_role");
+  sessionStorage.removeItem("admin_token");
+  sessionStorage.removeItem("admin_user");
+  sessionStorage.removeItem("admin_role");
   location.reload();
 }
 let _tabLoading={};
@@ -1019,9 +1019,9 @@ async function fetchAdmin(action, extra={}){
     if(msg.includes("توکن نامعتبر") || msg.includes("منقضی") || msg.includes("حذف") || msg.includes("غیرفعال") || msg.includes("کاربر یافت نشد")){
       // نشست باطل شده (حذف/غیرفعال) — فوراً خارج کن
       try{
-        localStorage.removeItem("admin_token");
-        localStorage.removeItem("admin_user");
-        localStorage.removeItem("admin_role");
+        sessionStorage.removeItem("admin_token");
+        sessionStorage.removeItem("admin_user");
+        sessionStorage.removeItem("admin_role");
       }catch(e){}
       // اگر در داشبورد بود، به لاگین ببر
       const dash=document.getElementById("dashboard");
@@ -1684,15 +1684,15 @@ async function tryAutoLogin(){
     const d = JSON.parse(text);
     if(!d.ok) throw new Error(d.error);
     // توکن معتبر است
-    currentRole = d.role || localStorage.getItem("admin_role") || "admin";
-    localStorage.setItem("admin_role", currentRole);
+    currentRole = d.role || sessionStorage.getItem("admin_role") || "admin";
+    sessionStorage.setItem("admin_role", currentRole);
     showDashboard();
   } catch(e){
     console.warn("autoLogin failed, show login", e);
     // توکن خراب یا منقضی - پاک کن و فرم ورود را نشان بده
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_user");
-    localStorage.removeItem("admin_role");
+    sessionStorage.removeItem("admin_token");
+    sessionStorage.removeItem("admin_user");
+    sessionStorage.removeItem("admin_role");
     token=""; currentUser="";
     document.getElementById("loginCard").classList.remove("hidden");
     document.getElementById("dashboard").classList.add("hidden");
@@ -1716,7 +1716,7 @@ setTimeout(()=>{
       btn.className="ghost";
       btn.style="margin-top:8px; font-size:11px;";
       btn.textContent="♻️ پاکسازی حافظه (اگر بدون رمز وارد می‌شود)";
-      btn.onclick=()=>{ localStorage.clear(); location.reload(); };
+      btn.onclick=()=>{ sessionStorage.clear(); location.reload(); };
       card.appendChild(btn);
     }
   }
