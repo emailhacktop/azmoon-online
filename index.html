@@ -327,24 +327,40 @@ function updateSubtitle(cfg){
 
 // ============ بارگذاری بانک ============
 async function loadDB(){
+  // اگر حالت امن فعال است، اول از سرور بگیر تا آخرین سوالات اضافه‌شده را ببینیم
+  if(USE_SECURE_MODE){
+    try{
+      const r = await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getPublicDB"})});
+      const t = await r.text();
+      if(!t.trim().startsWith("<")){
+        const j = JSON.parse(t);
+        if(j.ok && j.db && j.db.questions){
+          DB = j.db;
+          DB.categories.forEach(c=>{ categoryMap[c.id]=c.label; });
+          populateCategorySelect();
+          try{
+            const cfg = await fetchConfig();
+            updateSubtitle(cfg);
+          }catch(e){ updateSubtitle(null); }
+          console.log("DB loaded from server", j.total, j.cats);
+          return;
+        }
+      }
+    }catch(e){ console.warn("server DB fetch failed, fallback to local", e.message); }
+  }
   try{
     const res = await fetch(DB_URL, {cache:"no-store"});
     if(!res.ok) throw new Error("not found");
     DB = await res.json();
-    // ساخت categoryMap
-    DB.categories.forEach(c=>{
-      categoryMap[c.id]=c.label;
-    });
+    DB.categories.forEach(c=>{ categoryMap[c.id]=c.label; });
     populateCategorySelect();
-    // به‌روزرسانی عنوان پویا
     try{
       const cfg = await fetchConfig();
       updateSubtitle(cfg);
     }catch(e){ updateSubtitle(null); }
-    console.log("DB loaded", DB.meta);
+    console.log("DB loaded local", DB.meta);
   } catch(e){
     console.warn("DB json not found, fallback to legacy JS files", e);
-    // fallback: دسته‌های ثابت قدیمی
     const fallbackCats = [
       {id:"history_geo", label:"تاریخ و جغرافیا"},
       {id:"literature", label:"شعر و ادبیات"},
