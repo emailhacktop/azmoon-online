@@ -360,7 +360,7 @@ const WEB_APP_URL = (() => {
   const h = location.hostname;
   if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
   if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
-  return "https://script.google.com/macros/s/AKfycby79TpveF1Sq5ZITEb7sGdphSfsCyX6wAutY37skETyjB5Dvo2PMzQTWjFmnYzddqidwg/exec";
+  return "https://script.google.com/macros/s/AKfycbwo8CPeDKCxQecbKeWTntXzLZPikaPxqMqZrEXwEttEV9OO0KfSueOZOmhVhUymHu8/exec";
 })();
 const DB_URL = "assets/questions_db.json";
 async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
