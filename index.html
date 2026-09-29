@@ -290,18 +290,28 @@ async function fetchConfig(){
       const t=await r.text();
       if(t.trim().startsWith("<")) throw new Error("HTML");
       const j=JSON.parse(t);
-      if(j.ok){ EXAM_CONFIG={duration:j.duration||180, count:j.count||10}; return EXAM_CONFIG; }
+      if(j.ok){ 
+        EXAM_CONFIG={duration:j.duration||180, count:j.count||10, total:j.total||0, cats:j.cats||0, details:j.details||{}}; 
+        return EXAM_CONFIG; 
+      }
     }
   }catch(e){ console.warn("fetchConfig fail, use default",e.message); }
+  // fallback: از DB محلی
+  const total = DB && DB.questions ? DB.questions.length : 0;
+  const cats = DB && DB.categories ? DB.categories.length : 0;
+  const details = {};
+  if(DB && DB.questions) DB.questions.forEach(q=>{ details[q.category]=(details[q.category]||0)+1; });
+  EXAM_CONFIG.total=total; EXAM_CONFIG.cats=cats; EXAM_CONFIG.details=details;
   return EXAM_CONFIG;
 }
 function updateSubtitle(cfg){
   const el=document.getElementById("subtitle");
   if(!el) return;
-  const total = DB && DB.questions ? DB.questions.length : 0;
-  const cats = DB && DB.categories ? DB.categories.length : 0;
-  const cnt = cfg ? cfg.count : EXAM_CONFIG.count;
-  const dur = cfg ? cfg.duration : EXAM_CONFIG.duration;
+  const c = cfg || EXAM_CONFIG;
+  const total = c.total || (DB && DB.questions ? DB.questions.length : 0);
+  const cats = c.cats || (DB && DB.categories ? DB.categories.length : 0);
+  const cnt = c.count || EXAM_CONFIG.count;
+  const dur = c.duration || EXAM_CONFIG.duration;
   const durMin = Math.floor(dur/60);
   const durSec = dur%60;
   const durText = durSec ? `${durMin} دقیقه و ${durSec} ثانیه` : `${durMin} دقیقه`;
@@ -310,6 +320,8 @@ function updateSubtitle(cfg){
   } else {
     el.textContent = `هر آزمون ${cnt} سوال تصادفی — زمان ${durText}`;
   }
+  // همچنین dropdown را اگر قبلاً پر شده، با counts جدید به‌روزرسانی کن
+  if(c.details) updateCategoryCounts(c.details);
 }
 // همچنین بعد از لود اولیه DB، یک بار دیگر subtitle را به‌روزرسانی کن
 
@@ -347,14 +359,25 @@ async function loadDB(){
 }
 function populateCategorySelect(){
   categorySelect.innerHTML="";
+  const details = EXAM_CONFIG.details || {};
   (DB.categories||[]).forEach(cat=>{
     const opt=document.createElement("option");
     opt.value=cat.id;
-    opt.textContent = `${cat.icon||"📁"} ${cat.label} (${(DB.questions.filter(q=>q.category===cat.id).length)||"?" } سوال)`;
+    const cnt = details[cat.id] !== undefined ? details[cat.id] : (DB.questions.filter(q=>q.category===cat.id).length);
+    opt.textContent = `${cat.icon||"📁"} ${cat.label} (${cnt} سوال)`;
     categorySelect.appendChild(opt);
   });
-  // اگر دسته‌ای از قبل انتخاب نشده، اولی را بگذار
   if(DB.categories.length) categorySelect.value=DB.categories[0].id;
+}
+function updateCategoryCounts(details){
+  // به‌روزرسانی متن گزینه‌ها بدون بازسازی کامل
+  if(!details || !categorySelect.options.length) return;
+  Array.from(categorySelect.options).forEach(opt=>{
+    const cat = DB.categories.find(c=>c.id===opt.value);
+    if(cat && details[cat.id]!==undefined){
+      opt.textContent = `${cat.icon||"📁"} ${cat.label} (${details[cat.id]} سوال)`;
+    }
+  });
 }
 
 // ============ انتخاب سوالات حالت آفلاین ============
