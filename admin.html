@@ -429,7 +429,17 @@ async function doLogin(){
     showDashboard();
     showMsg("loginMsg","ورود موفق ✅",true);
   } catch(e){
-    showMsg("loginMsg", "خطا: "+e.message, false);
+    let msg = e.message||"";
+    if(msg.includes("Failed to fetch") || msg.includes("NetworkError")){
+      msg = "Failed to fetch — ارتباط با سرور برقرار نشد.<br><br>"+
+            "<b>بررسی کنید:</b><br>"+
+            "1) آیا <b>WEB_APP_URL</b> در admin.html / index.html با <b>Web App URL جدید</b> Deploy یکسان است؟<br>"+
+            "2) در Apps Script → Deploy → Manage deployments → Edit → <b>Who has access = Anyone</b> باشد (نه Only myself).<br>"+
+            "3) نسخه جدید را <b>Deploy → New version</b> کرده‌اید، نه فقط Save.<br>"+
+            "4) اگر با فیلترشکن هستید، خاموش کنید و دوباره امتحان کنید.<br>"+
+            "<span class='small'>URL فعلی: <code style='word-break:break-all;'>"+WEB_APP_URL+"</code><br>برای به‌روزرسانی سریع از فایل <code>tools_set_url.sh</code> استفاده کنید: <code>./tools_set_url.sh https://script.google.com/macros/s/YOUR_NEW_ID/exec</code></span>";
+    }
+    showMsg("loginMsg", "خطا: "+msg, false);
   } finally{ document.getElementById("btnLogin").disabled=false; }
 }
 let currentRole = sessionStorage.getItem("admin_role") || "admin";

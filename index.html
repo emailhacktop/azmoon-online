@@ -846,8 +846,26 @@ async function openStudy(){
       return;
     }
     // موفق: نمایش همه سوالات آن دسته (از DB یکپارچه)
-    if(DB.questions.length){
+    // اگر سرور db کامل را برگرداند (با c)، از آن استفاده کن — وگرنه از DB محلی
+    if(d.db && d.db.questions && d.db.questions.length){
+      // سرور بانک کامل با پاسخ صحیح را داده
+      showStudyContentDB_FromServer(d.db);
+    } else if(DB.questions.length && DB.questions[0].c){
       showStudyContentDB();
+    } else {
+      // fallback: اگر DB محلی بدون c بود (حالت امن)، دوباره از assets بخوان (با c)
+      try{
+        const r2 = await fetch(DB_URL, {cache:"no-store"});
+        const full = await r2.json();
+        if(full && full.questions && full.questions[0] && full.questions[0].c){
+          DB = full;
+          showStudyContentDB();
+        } else {
+          showStudyContentDB();
+        }
+      }catch(e){
+        showStudyContentDB();
+      }
     } else {
       // fallback قدیمی
       const s=document.createElement("script");
@@ -860,8 +878,30 @@ async function openStudy(){
       document.head.appendChild(s);
     }
   } catch(e){
-    alert("خطا در ارتباط با سرور: "+e.message);
+    let msg = e.message||"";
+    if(msg.includes("Failed to fetch") || msg.includes("NetworkError")){
+      msg = "Failed to fetch — سرور در دسترس نیست. WEB_APP_URL را چک کنید (Deploy جدید → Anyone).\nURL فعلی: "+WEB_APP_URL+"\nاگر تازه Deploy کرده‌اید، 1 دقیقه صبر کنید و دوباره امتحان کنید.";
+    }
+    alert("خطا در ارتباط با سرور: "+msg);
   }
+}
+function showStudyContentDB_FromServer(serverDB){
+  startBox.classList.add("hidden");
+  const cat = serverDB.questions.length ? serverDB.questions[0].category : category;
+  const label = (serverDB.categories && serverDB.categories.find(c=>c.id===cat)?.label) || categoryMap[category] || category;
+  const filtered = serverDB.questions;
+  let html = `<div class="box"><h3>📘 مرور سوالات (${sanitizeText(label)}) - ${filtered.length} سوال</h3><p style="font-size:12px; color:#6b7280;">نمایش پاسخ صحیح - فقط برای مطالعه</p>`;
+  filtered.forEach(q=>{
+    html += `<div style="text-align:right; padding:10px; border:1px solid #e5e7eb; border-radius:10px; margin:8px 0;">
+      <div style="font-size:12px; color:#6b7280;">#${sanitizeText(String(q.id))} - <span class="badge cat-${sanitizeText(q.group)}">${sanitizeText(q.group)}</span></div>
+      <div style="font-weight:700; margin:6px 0;">${sanitizeText(q.q)}</div>
+      <div style="font-size:13px;">گزینه‌ها: ${q.a.map(a=>`<span style="background:#f3f4f6; padding:2px 6px; border-radius:6px; margin:2px; display:inline-block;">${sanitizeText(a)}</span>`).join("")}</div>
+      <div style="color:#065f46; font-weight:700; margin-top:6px; background:#ecfdf5; padding:6px 8px; border-radius:8px; border:1px solid #6ee7b7;">✅ پاسخ صحیح: ${sanitizeText(q.c)} <span style="font-weight:400; color:#065f46;">(${sanitizeText(q.c)})</span></div>
+    </div>`;
+  });
+  html += `<button onclick="location.reload()">بازگشت</button></div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  window.scrollTo({top: document.body.scrollHeight, behavior:"smooth"});
 }
 function showStudyContentDB(){
   startBox.classList.add("hidden");
@@ -872,7 +912,7 @@ function showStudyContentDB(){
       <div style="font-size:12px; color:#6b7280;">#${q.id} - <span class="badge cat-${sanitizeText(q.group)}">${sanitizeText(q.group)}</span></div>
       <div style="font-weight:700; margin:6px 0;">${sanitizeText(q.q)}</div>
       <div style="font-size:13px;">گزینه‌ها: ${q.a.map(a=>`<span style="background:#f3f4f6; padding:2px 6px; border-radius:6px; margin:2px; display:inline-block;">${sanitizeText(a)}</span>`).join("")}</div>
-      <div style="color:#065f46; font-weight:700; margin-top:6px;">✅ پاسخ: ${sanitizeText(q.c)}</div>
+      <div style="color:#065f46; font-weight:700; margin-top:6px; background:#ecfdf5; padding:6px 8px; border-radius:8px; border:1px solid #6ee7b7;">✅ پاسخ صحیح: ${q.c ? sanitizeText(q.c) : "<span style=\"color:#991b1b\">در دسترس نیست — لطفاً دوباره وارد شوید</span>"}</div>
     </div>`;
   });
   html += `<button onclick="location.reload()">بازگشت</button></div>`;
