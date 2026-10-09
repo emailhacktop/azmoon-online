@@ -654,7 +654,7 @@ function formatQuestion(text){
   return esc;
 }
 function isMathQuestion(q){
-  return q && (q.category==='math_iq' || /[²³π√×÷=]/.test(q.q) || /\d+\s*[+\-×÷^=]\s*\d+/.test(q.q));
+  return q && (q.category==='math_iq' || /[²³π√×÷=!]/.test(q.q) || /\d+\s*[+\-×÷^=!]\s*\d+/.test(q.q));
 }
 
 function showQ(){
@@ -669,7 +669,7 @@ function showQ(){
     // اگر ریاضی بود، HTML با LTR
     const esc = String(cur.q).replace(/[&<>"]/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
     // بخش‌های فرمول را با math-ltr بپوشان
-    const withMath = esc.replace(/([0-9۰-۹xX²³π√×÷=\+\-\/\(\)\. ]{3,})/g, '<span class="math-ltr">$1</span>');
+    const withMath = esc.replace(/([0-9۰-۹xX²³π√×÷=\+\-\/\(\)\.\! ]{3,})/g, '<span class="math-ltr">$1</span>');
     qEl.innerHTML = withMath;
   } else {
     qEl.textContent = cur.q;
@@ -966,7 +966,7 @@ function showStudyContentDB_FromServer(serverDB){
       <div style="font-size:12px; color:#6b7280;">#${sanitizeText(String(q.id))} - <span class="badge cat-${sanitizeText(q.group)}">${sanitizeText(q.group)}</span></div>
       <div style="font-weight:700; margin:6px 0;">${sanitizeText(q.q)}</div>
       <div style="font-size:13px;">گزینه‌ها: ${q.a.map(a=>`<span style="background:#f3f4f6; padding:2px 6px; border-radius:6px; margin:2px; display:inline-block;">${sanitizeText(a)}</span>`).join("")}</div>
-      <div style="color:#065f46; font-weight:700; margin-top:6px; background:#ecfdf5; padding:6px 8px; border-radius:8px; border:1px solid #6ee7b7;">✅ پاسخ صحیح: ${sanitizeText(q.c)} <span style="font-weight:400; color:#065f46;">(${sanitizeText(q.c)})</span></div>
+      <div style="color:#065f46; font-weight:700; margin-top:6px; background:#ecfdf5; padding:6px 8px; border-radius:8px; border:1px solid #6ee7b7;">✅ پاسخ صحیح: ${sanitizeText(q.c)}</div>
     </div>`;
   });
   html += `<button onclick="location.reload()">بازگشت</button></div>`;
