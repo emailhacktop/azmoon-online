@@ -125,6 +125,8 @@
     h2{ font-size:19px; }
     #q{ font-size:16px; }
   }
+  /* fix math LTR - فرمول‌ها چپ‌چین */
+  .math-ltr{ direction:ltr; display:inline-block; unicode-bidi:embed; font-family: monospace; background:#f8fafc; padding:0 4px; border-radius:4px; }
   /* جلوگیری از انتخاب فقط ظاهری - در JS هم جلوی کپی گرفته می‌شود */
 </style>
 </head>
@@ -201,7 +203,7 @@ const WEB_APP_URL = (() => {
   const h = location.hostname;
   if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0") return `http://${h}:${location.port}/exec`;
   if (location.protocol === "file:") return ""; // فایل مستقیم → آفلاین کامل
-  return "https://script.google.com/macros/s/AKfycbzdUk9O9tvtfljK3zYyA2hSMieWFLtRqdT76WOdO0tGrLhl64eopqiagK8H8JiG-MPyVg/exec";
+  return "https://script.google.com/macros/s/AKfycbzO64UfDiYEkJZKevv0EIY1p6-wgxDxY90t7JoK7QPL0_kBGVuW9JJ2jPFYkW8X-dauKQ/exec";
 })();
 const USE_SECURE_MODE = WEB_APP_URL && WEB_APP_URL.startsWith("https://");
 
@@ -565,6 +567,26 @@ function updateTimerDisplay(sec){
 }
 
 // ============ نمایش سوال ============
+
+function formatQuestion(text){
+  // escape HTML
+  let esc = String(text||"").replace(/[&<>"]/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+  // اگر فرمول ریاضی داشت، بخش ریاضی را LTR کن
+  // تشخیص: اعداد + عملگرها + ² √ × ÷ π
+  if(/[0-9²³π√×÷=+\-×÷\^]/.test(text) && /[xXa-zA-Z0-9]/.test(text)){
+    // کل متن را اگر ریاضی بود، داخل math-ltr بگذار اگر کوتاه است، یا فقط بخش فرمول
+    // ساده: اگر دسته ریاضی/هوش باشد، کل سوال را LTR wrapper برای بخش فرمول
+    // برای الان فقط اگر شامل = یا + یا × بود، کل را با dir auto نمایش بده
+    // اما برای حفظ RTL برای متن فارسی، فقط بخش فرمول را جدا می‌کنیم
+    // فعلاً کل q را اگر شامل فرمول بود با <span dir="ltr"> می‌پیچیم
+    // این کار را فقط برای نمایش انجام می‌دهیم، نه برای ذخیره
+  }
+  return esc;
+}
+function isMathQuestion(q){
+  return q && (q.category==='math_iq' || /[²³π√×÷=]/.test(q.q) || /\d+\s*[+\-×÷^=]\s*\d+/.test(q.q));
+}
+
 function showQ(){
   if(currentIndex >= qs.length){ finish(); return; }
   const cur = qs[currentIndex];
@@ -572,14 +594,23 @@ function showQ(){
   qCat.textContent = cur.cat || cur.group || "عمومی";
   qCat.className = "badge cat-" + (cur.cat || cur.group || "عمومی");
   qId.textContent = "#"+(cur.id||currentIndex+1);
-  qEl.textContent = sanitizeText(cur.q);
+  // نمایش فرمول ریاضی چپ‌چین
+  if(cur.category==='math_iq' || /[0-9]/.test(cur.q) && /[+\-×÷=²√π]/.test(cur.q)){
+    // اگر ریاضی بود، HTML با LTR
+    const esc = String(cur.q).replace(/[&<>"]/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+    // بخش‌های فرمول را با math-ltr بپوشان
+    const withMath = esc.replace(/([0-9۰-۹xX²³π√×÷=\+\-\/\(\)\. ]{3,})/g, '<span class="math-ltr">$1</span>');
+    qEl.innerHTML = withMath;
+  } else {
+    qEl.textContent = cur.q;
+  }
 
   opts.innerHTML="";
   // جلوگیری از دابل کلیک
   let answered=false;
   cur.a.forEach(optText=>{
     const btn=document.createElement("button");
-    btn.textContent = sanitizeText(optText);
+    btn.textContent = optText;
     btn.onclick=()=>{
       if(answered) return;
       answered=true;
