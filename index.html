@@ -288,7 +288,10 @@ let EXAM_CONFIG = {duration:180, count:10};
 async function fetchConfig(){
   try{
     if(USE_SECURE_MODE){
-      const r=await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getConfig"})});
+      const controller = new AbortController();
+      const to = setTimeout(()=>controller.abort(), 3000);
+      const r=await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getConfig"}), signal: controller.signal});
+      clearTimeout(to);
       const t=await r.text();
       if(t.trim().startsWith("<")) throw new Error("HTML");
       const j=JSON.parse(t);
@@ -297,7 +300,7 @@ async function fetchConfig(){
         return EXAM_CONFIG; 
       }
     }
-  }catch(e){ console.warn("fetchConfig fail, use default",e.message); }
+  }catch(e){ console.warn("fetchConfig fail, use default", e.name==="AbortError" ? "timeout" : e.message); }
   // fallback: از DB محلی
   const total = DB && DB.questions ? DB.questions.length : 0;
   const cats = DB && DB.categories ? DB.categories.length : 0;
@@ -329,14 +332,31 @@ function updateSubtitle(cfg){
 
 // ============ بارگذاری بانک ============
 async function loadDB(){
-  // اگر حالت امن فعال است، اول از سرور بگیر تا آخرین سوالات اضافه‌شده را ببینیم
+  // نسخه سریع: اول فایل محلی را فوری لود کن تا گیر نکند، بعد در پس‌زمینه سرور را چک کن
+  let localLoaded = false;
+  try{
+    const res = await fetch(DB_URL, {cache:"no-store"});
+    if(res.ok){
+      DB = await res.json();
+      DB.categories.forEach(c=>{ categoryMap[c.id]=c.label; });
+      populateCategorySelect();
+      updateSubtitle(null);
+      localLoaded = true;
+      console.log("DB loaded local (fast)", DB.meta);
+    }
+  }catch(e){ console.warn("local DB fast load failed", e); }
+
+  // حالا اگر حالت امن است، تلاش کن در پس‌زمینه با تایم‌اوت کوتاه سرور را چک کنی (بدون قفل کردن UI)
   if(USE_SECURE_MODE){
     try{
-      const r = await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getPublicDB"})});
+      const controller = new AbortController();
+      const timeout = setTimeout(()=>controller.abort(), 3500);
+      const r = await fetch(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getPublicDB"}), signal: controller.signal});
+      clearTimeout(timeout);
       const t = await r.text();
       if(!t.trim().startsWith("<")){
         const j = JSON.parse(t);
-        if(j.ok && j.db && j.db.questions){
+        if(j.ok && j.db && j.db.questions && j.db.questions.length){
           DB = j.db;
           DB.categories.forEach(c=>{ categoryMap[c.id]=c.label; });
           populateCategorySelect();
@@ -344,25 +364,33 @@ async function loadDB(){
             const cfg = await fetchConfig();
             updateSubtitle(cfg);
           }catch(e){ updateSubtitle(null); }
-          console.log("DB loaded from server", j.total, j.cats);
+          console.log("DB refreshed from server", j.total, j.cats);
           return;
         }
       }
-    }catch(e){ console.warn("server DB fetch failed, fallback to local", e.message); }
+    }catch(e){
+      console.warn("server DB refresh failed (ignored, local kept)", e.name==="AbortError" ? "timeout" : e.message);
+      // اگر قبلاً لوکال لود شده بود، همان را نگه دار و ساب‌تایتل را به‌روز کن
+      if(localLoaded){
+        try{ const cfg = await fetchConfig(); updateSubtitle(cfg); }catch(_e){ updateSubtitle(null); }
+        return;
+      }
+    }
   }
-  try{
-    const res = await fetch(DB_URL, {cache:"no-store"});
-    if(!res.ok) throw new Error("not found");
-    DB = await res.json();
-    DB.categories.forEach(c=>{ categoryMap[c.id]=c.label; });
-    populateCategorySelect();
+
+  if(!localLoaded){
+    // اگر هنوز هیچی لود نشده، fallback نهایی
     try{
-      const cfg = await fetchConfig();
-      updateSubtitle(cfg);
-    }catch(e){ updateSubtitle(null); }
-    console.log("DB loaded local", DB.meta);
-  } catch(e){
-    console.warn("DB json not found, fallback to legacy JS files", e);
+      const res2 = await fetch(DB_URL, {cache:"no-store"});
+      if(res2.ok){
+        DB = await res2.json();
+        DB.categories.forEach(c=>{ categoryMap[c.id]=c.label; });
+        populateCategorySelect();
+        updateSubtitle(null);
+        return;
+      }
+    }catch(e){}
+    console.warn("DB json not found, fallback to legacy");
     const fallbackCats = [
       {id:"history_geo", label:"تاریخ و جغرافیا"},
       {id:"literature", label:"شعر و ادبیات"},
@@ -372,7 +400,7 @@ async function loadDB(){
     DB = {categories: fallbackCats, questions: []};
     fallbackCats.forEach(c=> categoryMap[c.id]=c.label);
     populateCategorySelect();
-    if(dbInfo) dbInfo.textContent = "حالت سازگار قدیمی - ۴ دسته";
+    updateSubtitle(null);
   }
 }
 function populateCategorySelect(){
