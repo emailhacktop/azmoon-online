@@ -382,7 +382,14 @@ const WEB_APP_URL = (() => {
   return "https://script.google.com/macros/s/AKfycbzdUk9O9tvtfljK3zYyA2hSMieWFLtRqdT76WOdO0tGrLhl64eopqiagK8H8JiG-MPyVg/exec";
 })();
 const DB_URL = "assets/questions_db.json";
-async function getClientIP(){ try{ const r=await fetch('https://api.ipify.org?format=json',{cache:'no-store'}); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
+
+function fetchWithTimeout(url, opts={}, ms=5000){
+  const controller = new AbortController();
+  const id = setTimeout(()=>controller.abort(), ms);
+  return fetch(url, Object.assign({}, opts, {signal: controller.signal})).finally(()=> clearTimeout(id));
+}
+
+async function getClientIP(){ try{ const r=await fetchWithTimeout('https://api.ipify.org?format=json',{cache:'no-store'},2500); const j=await r.json(); return j.ip||""; }catch(e){ return ""; } }
 
 let DB = null;
 let token = sessionStorage.getItem("admin_token") || "";
@@ -416,7 +423,7 @@ async function doLogin(){
   if(!u||!p) return showMsg("loginMsg","نام و رمز را وارد کنید",false);
   document.getElementById("btnLogin").disabled=true;
   try{
-    const r=await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminLogin", username:u, password:p})});
+    const r=await fetchWithTimeout(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminLogin", username:u, password:p})});
     const text = await r.text();
     let d;
     try{ d=JSON.parse(text); } catch(e){ throw new Error("پاسخ غیرمنتظره از سرور (HTML). مطمئن شوید deployment روی Anyone است. متن: "+text.slice(0,120)); }
@@ -522,7 +529,7 @@ let _verifyInProgress=false;
 function verifyToken(){
   if(!token || _verifyInProgress) return;
   _verifyInProgress=true;
-  fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})})
+  fetchWithTimeout(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})})
   .then(r=>r.text()).then(text=>{
     if(text.trim().startsWith("<") || text.includes("ppConfig")){
       console.warn("verifyToken HTML response - ignore, maybe deployment warmup");
@@ -1037,7 +1044,7 @@ async function fetchAdmin(action, extra={}){
   try{
     const ip = await getClientIP().catch(()=>"");
     const body = JSON.stringify(Object.assign({action:action, token:token, ip:ip, userAgent:navigator.userAgent}, extra));
-    const r = await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:body});
+    const r = await fetchWithTimeout(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:body});
     const text = await r.text();
   if(text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html") || text.includes("ppConfig")){
     throw new Error("پاسخ HTML از سرور (توکن منقضی یا شبکه ناپایدار). لطفاً ۵ ثانیه صبر کنید و دوباره امتحان کنید. اگر تکرار شد، یک بار خروج و ورود کنید.");
@@ -1705,7 +1712,7 @@ async function tryAutoLogin(){
   }
   // یک بار توکن را چک کن، اگر نامعتبر بود لاگین را نشان بده
   try{
-    const r = await fetch(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})});
+    const r = await fetchWithTimeout(WEB_APP_URL,{method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action:"adminVerify", token:token})});
     const text = await r.text();
     if(text.trim().startsWith("<") || text.includes("ppConfig")){
       throw new Error("HTML");
