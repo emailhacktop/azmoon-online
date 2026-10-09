@@ -264,19 +264,32 @@ function sanitizeText(s){
   return String(s||"").replace(/[&<>"']/g, m=> ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
+
+function friendlyAbortMessage(e){
+  const msg = String(e && e.message || e);
+  if(msg.includes("aborted") || msg==="timeout" || (e && e.name==="AbortError")){
+    return "سرور پاسخ نداد (تایم‌اوت). لطفاً 10 ثانیه صبر کنید و دوباره امتحان کنید. اگر با فیلترشکن هستید خاموش کنید. اگر تازه Deploy کرده‌اید، 1 دقیقه صبر کنید.";
+  }
+  return msg;
+}
+
 function fetchWithTimeout(url, opts={}, ms=4000){
   const controller = new AbortController();
-  const id = setTimeout(()=>controller.abort(), ms);
+  const id = setTimeout(()=>controller.abort("timeout"), ms);
   const sig = controller.signal;
   const merged = Object.assign({}, opts, {signal: sig});
-  // ensure headers
-  return fetch(url, merged).finally(()=> clearTimeout(id));
+  return fetch(url, merged).catch(e=>{
+    if(e && (e.name==="AbortError" || String(e.message).includes("aborted") || String(e).includes("timeout"))){
+      throw new Error("سرور پاسخ نداد (تایم‌اوت " + (ms/1000) + " ثانیه). لطفاً دوباره امتحان کنید. اگر تازه Deploy کرده‌اید 1 دقیقه صبر کنید.");
+    }
+    throw e;
+  }).finally(()=> clearTimeout(id));
 }
 
 async function getClientIP(){
   try{
     const controller = new AbortController();
-    const to = setTimeout(()=>controller.abort(), 2500);
+    const to = setTimeout(()=>controller.abort("timeout"), 2500);
     const r = await fetch('https://api.ipify.org?format=json', {cache:'no-store', signal: controller.signal});
     clearTimeout(to);
     const j = await r.json();
@@ -302,7 +315,7 @@ async function fetchConfig(){
   try{
     if(USE_SECURE_MODE){
       const controller = new AbortController();
-      const to = setTimeout(()=>controller.abort(), 3000);
+      const to = setTimeout(()=>controller.abort("timeout"), 3000);
       const r=await fetchWithTimeout(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getConfig"}), signal: controller.signal});
       clearTimeout(to);
       const t=await r.text();
@@ -369,7 +382,7 @@ async function loadDB(){
   if(USE_SECURE_MODE){
     try{
       const controller = new AbortController();
-      const timeout = setTimeout(()=>controller.abort(), 3500);
+      const timeout = setTimeout(()=>controller.abort("timeout"), 3500);
       const r = await fetchWithTimeout(WEB_APP_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"getPublicDB"}), signal: controller.signal});
       clearTimeout(timeout);
       const t = await r.text();
@@ -896,7 +909,7 @@ async function openStudy(){
         category: category, studyName: studyName,
         ip: await getClientIP(), userAgent: navigator.userAgent
       })
-    });
+    }, 8000);
     const d = await resp.json();
     if(!d.ok){
       alert(d.error || "دسترسی غیرمجاز");
@@ -939,7 +952,7 @@ async function openStudy(){
     if(msg.includes("Failed to fetch") || msg.includes("NetworkError")){
       msg = "Failed to fetch — سرور در دسترس نیست. WEB_APP_URL را چک کنید (Deploy جدید → Anyone).\nURL فعلی: "+WEB_APP_URL+"\nاگر تازه Deploy کرده‌اید، 1 دقیقه صبر کنید و دوباره امتحان کنید.";
     }
-    alert("خطا در ارتباط با سرور: "+msg);
+    alert("خطا در ارتباط با سرور: "+friendlyAbortMessage(e));
   }
 }
 function showStudyContentDB_FromServer(serverDB){
